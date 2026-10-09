@@ -54,7 +54,8 @@ restoreFile(
     MEM_CONTEXT_TEMP_BEGIN()
     {
         // Check files to determine which ones need to be restored
-        StorageReadMulti *const repoFileRead = storageNewReadMultiP(storageRepoIdx(repoIdx));
+        const Storage *const backupStorage = forkStorageRepoIdx(repoIdx);
+        StorageReadMulti *const repoFileRead = storageNewReadMultiP(backupStorage);
 
         for (unsigned int fileIdx = 0; fileIdx < lstSize(fileList); fileIdx++)
         {
@@ -290,7 +291,7 @@ restoreFile(
                             // Open the super block list for read. Using one read for all super blocks is cheaper than reading from
                             // the file multiple times, which is especially noticeable on object stores.
                             StorageRead *const superBlockRead = storageNewReadP(
-                                storageRepoIdx(repoIdx),
+                                backupStorage,
                                 backupFileRepoPathP(
                                     strLstGet(referenceList, read->reference), .manifestName = file->manifestFile,
                                     .bundleId = read->bundleId, .blockIncr = true),

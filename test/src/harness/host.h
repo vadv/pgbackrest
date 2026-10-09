@@ -54,6 +54,7 @@ typedef struct HrnHostTestDefine
     unsigned int rt;                                                // Repository total
     bool bnd;                                                       // Bundling enabled?
     bool bi;                                                        // Block incremental enabled?
+    bool repoDirect;                                                // Access repositories directly from pg hosts?
 } HrnHostTestDefine;
 
 /***********************************************************************************************************************************
@@ -98,7 +99,7 @@ typedef struct HrnHostPub
     const String *pgDataPath;                                       // Pg data path
     const String *pgTsPath;                                         // Pg tablespace path
     const String *pgLogFile;                                        // Pg log path
-    const Storage *pgStorage;                                       // Pg storage
+    Storage *pgStorage;                                             // Pg storage
     const String *repo1Path;                                        // Repo1 path
     Storage *repo1Storage;                                          // Repo1 storage
     const String *repo2Path;                                        // Repo2 path
@@ -213,6 +214,9 @@ hrnHostPgDataPath(const HrnHost *const this)
     return THIS_PUB(HrnHost)->pgDataPath;
 }
 
+// Change the data path while pg is stopped
+void hrnHostPgDataPathSet(HrnHost *this, const String *path);
+
 // Pg standby?
 FN_INLINE_ALWAYS bool
 hrnHostPgStandby(const HrnHost *const this)
@@ -306,7 +310,9 @@ String *hrnHostExec(HrnHost *this, const String *command, HrnHostExecParam param
         const HrnHostExecBrParam param = {VAR_PARAM_INIT, __VA_ARGS__};                                                            \
                                                                                                                                    \
         TEST_RESULT_INFO_FMT(                                                                                                      \
-            "%s: pgbackrest%s %s%s%s", strZ(hrnHostName(this)), param.option == NULL ? "" : zNewFmt(" %s", param.option), command, \
+            "%s: pgbackrest%s%s %s%s%s", strZ(hrnHostName(this)),                                                                \
+            param.stanza == NULL ? "" : zNewFmt(" --stanza=%s", param.stanza),                                                   \
+            param.option == NULL ? "" : zNewFmt(" %s", param.option), command,                                                   \
             param.param == NULL ? "" : zNewFmt(" %s", param.param),                                                                \
             param.resultExpect != 0 ? zNewFmt(" -- result %d", param.resultExpect) : "");                                          \
         hrnHostExecBrP(this, command , __VA_ARGS__);                                                                               \
@@ -316,6 +322,7 @@ String *hrnHostExec(HrnHost *this, const String *command, HrnHostExecParam param
 typedef struct HrnHostExecBrParam
 {
     VAR_PARAM_HEADER;
+    const char *stanza;                                             // Stanza (defaults to HRN_STANZA)
     const char *user;                                               // User to execute command
     const char *option;                                             // Options
     const char *param;                                              // Parameters
@@ -338,15 +345,24 @@ String *hrnHostExecBr(HrnHost *this, const char *command, HrnHostExecBrParam par
 
 void hrnHostPgCreate(HrnHost *this);
 
-#define HRN_HOST_PG_START(this)                                                                                                    \
+#define HRN_HOST_PG_START(this, ...)                                                                                               \
     do                                                                                                                             \
     {                                                                                                                              \
         TEST_RESULT_INFO_FMT("%s: start pg cluster", strZ(hrnHostName(this)));                                                     \
-        hrnHostPgStart(this);                                                                                                      \
+        hrnHostPgStartP(this, __VA_ARGS__);                                                                                        \
     }                                                                                                                              \
     while (0)
 
-void hrnHostPgStart(HrnHost *this);
+typedef struct HrnHostPgStartParam
+{
+    VAR_PARAM_HEADER;
+    bool noConfig;                                                 // Keep the restored PostgreSQL configuration?
+} HrnHostPgStartParam;
+
+#define hrnHostPgStartP(this, ...)                                                                                                 \
+    hrnHostPgStart(this, (HrnHostPgStartParam){VAR_PARAM_INIT, __VA_ARGS__})
+
+void hrnHostPgStart(HrnHost *this, HrnHostPgStartParam param);
 
 #define HRN_HOST_PG_STOP(this)                                                                                                     \
     do                                                                                                                             \
@@ -475,6 +491,7 @@ typedef struct HrnHostConfigUpdateParam
 {
     VAR_PARAM_HEADER;
     const Variant *archiveAsync;                                    // Update async archiving?
+    const String *stanza;                                           // Additional stanza
 } HrnHostConfigUpdateParam;
 
 #define hrnHostConfigUpdateP(...)                                                                                                  \

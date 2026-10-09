@@ -1,6 +1,7 @@
 /***********************************************************************************************************************************
 Test Archive Push Command
 ***********************************************************************************************************************************/
+#include "command/fork/common.h"
 #include "common/io/fdRead.h"
 #include "common/io/fdWrite.h"
 #include "common/time.h"
@@ -445,6 +446,14 @@ testRun(void)
         TEST_STORAGE_EXISTS(
             storageRepoIdx(0), STORAGE_REPO_ARCHIVE "/11-1/00000001.history", .comment = "check repo for history file");
 
+        TEST_RESULT_VOID(cmdArchivePush(), "retry identical history");
+        TEST_RESULT_LOG("P00   INFO: pushed WAL file '00000001.history' to the archive");
+        HRN_STORAGE_PUT_Z(storagePgWrite(), "pg_wal/00000001.history", "DIFFERENT HISTORY");
+        TEST_ERROR(
+            cmdArchivePush(), ArchiveDuplicateError,
+            "timeline history '00000001.history' already exists in the repo1 archive with different content");
+        TEST_STORAGE_GET(storageRepoIdx(0), STORAGE_REPO_ARCHIVE "/11-1/00000001.history", "FAKEHISTORY");
+
         // -------------------------------------------------------------------------------------------------------------------------
         TEST_TITLE("check drop functionality");
 
@@ -644,7 +653,7 @@ testRun(void)
             "P00   INFO: pushed WAL file '000000010000000100000002' to the archive");
 
         // -------------------------------------------------------------------------------------------------------------------------
-        TEST_TITLE("push succeeds on one repo when other repo fails to load archive.info");
+        TEST_TITLE("push requires a known destination repository");
 
         TEST_STORAGE_EXISTS(
             storageTest, zNewFmt("repo2/archive/test/11-1/0000000100000001/000000010000000100000002-%s", walBuffer2Sha1),
@@ -654,23 +663,21 @@ testRun(void)
             .remove = true);
         HRN_STORAGE_MODE(storageTest, "repo2", .mode = 0200);
 
+        // Unreadable fork metadata can hide a source repository. Block all writes until the check completes.
+        // With --repo, check only the selected destination.
         TEST_ERROR(
-            cmdArchivePush(), CommandError,
-            "archive-push command encountered error(s):\n"
-            "repo2: [FileOpenError] unable to load info file '" TEST_PATH "/repo2/archive/test/archive.info' or"
-            " '" TEST_PATH "/repo2/archive/test/archive.info.copy':\n"
-            "FileOpenError: unable to open file '" TEST_PATH "/repo2/archive/test/archive.info' for read: [13] Permission denied\n"
-            "FileOpenError: unable to open file '" TEST_PATH "/repo2/archive/test/archive.info.copy' for read:"
-            " [13] Permission denied\n"
-            "HINT: archive.info cannot be opened but is required to push/get WAL segments.\n"
-            "HINT: is archive_command configured correctly in postgresql.conf?\n"
-            "HINT: has a stanza-create been performed?\n"
-            "HINT: use --no-archive-check to disable archive checks during backup if you have an alternate archiving scheme.");
+            cmdArchivePush(), FileOpenError,
+            "unable to get info for path/file '" TEST_PATH "/repo2/backup/test/fork.info': [13] Permission denied");
+        TEST_STORAGE_LIST_EMPTY(
+            storageTest, "repo3/archive/test/11-1/0000000100000001", .comment = "unknown ownership prevents every push");
 
-        // Make sure WAL got pushed to repo3
+        cfgOptionSet(cfgOptRepo, cfgSourceParam, VARINT64(3));
+        TEST_RESULT_VOID(cmdArchivePush(), "explicit destination ignores unreadable unselected repository");
+        TEST_RESULT_LOG("P00   INFO: pushed WAL file '000000010000000100000002' to the archive");
         TEST_STORAGE_EXISTS(
             storageTest, zNewFmt("repo3/archive/test/11-1/0000000100000001/000000010000000100000002-%s", walBuffer2Sha1),
             .remove = true);
+        cfgOptionSet(cfgOptRepo, cfgSourceDefault, NULL);
 
         HRN_STORAGE_MODE(storageTest, "repo2");
 
@@ -1301,6 +1308,199 @@ testRun(void)
 
         // Uninstall local command handler shim
         hrnProtocolLocalShimUninstall();
+    }
+
+    // *****************************************************************************************************************************
+    if (testBegin("fork stores WAL and preserves timeline history"))
+    {
+        harnessLogLevelSet(logLevelInfo);
+        StringList *const args = strLstNew();
+        hrnCfgArgRawZ(args, cfgOptStanza, "child");
+        hrnCfgArgRawZ(args, cfgOptRepoPath, TEST_PATH "/source");
+        hrnCfgArgKeyRawZ(args, cfgOptRepoPath, 2, TEST_PATH "/child");
+        hrnCfgArgRawZ(args, cfgOptPgPath, TEST_PATH "/pg");
+        hrnCfgArgRawBool(args, cfgOptArchiveAsync, true);
+        hrnCfgArgRawBool(args, cfgOptArchiveHeaderCheck, false);
+        hrnCfgArgRawZ(args, cfgOptCompressType, "none");
+        StringList *historyArgs = strLstDup(args);
+        strLstAddZ(historyArgs, TEST_PATH "/pg/pg_wal/00000002.history");
+        HRN_CFG_LOAD(cfgCmdArchivePush, historyArgs);
+        HRN_PG_CONTROL_PUT(storagePgWrite(), PG_VERSION_16);
+
+        const char *const archiveInfo =
+            "[db]\n"
+            "db-id=1\n"
+            "\n"
+            "[db:history]\n"
+            "1={\"db-id\":" HRN_PG_SYSTEMID_16_Z ",\"db-version\":\"16\"}\n";
+        HRN_INFO_PUT(storageRepoIdxWrite(0), INFO_ARCHIVE_PATH_FILE, archiveInfo);
+        HRN_INFO_PUT(storageRepoIdxWrite(1), INFO_ARCHIVE_PATH_FILE, archiveInfo);
+        const InfoForkData data =
+        {
+            .sourceId = forkSourceId(0, STRDEF("source"), STRDEF("16-1"), HRN_PG_SYSTEMID_16),
+            .sourceRepoKey = 1,
+            .sourceStanza = STRDEF("source"),
+            .sourceArchiveId = STRDEF("16-1"),
+            .backupLabel = STRDEF("20260101-000000F"),
+            .importedBackupList = strLstNewSplitZ(STRDEF("20260101-000000F"), ","),
+            .pgVersion = PG_VERSION_16,
+            .systemId = HRN_PG_SYSTEMID_16,
+            .walSegmentSize = 16 * 1024 * 1024,
+            .sourceTimeline = 1,
+            .sourceHistory = EMPTY_STR,
+            .targetType = STRDEF("lsn"),
+            .targetValue = STRDEF("0/2800000"),
+            .state = infoForkStatePublished,
+            .history = EMPTY_STR,
+        };
+        infoForkSaveFile(
+            infoForkNew(6, &data), storageRepoIdxWrite(1), STRDEF(INFO_FORK_PATH_FILE), cfgCipherSpecMainIdx(1));
+        HRN_STORAGE_PUT_Z(storagePgWrite(), "pg_wal/00000002.history", "1\t0/2800000\tfork\n");
+
+        TEST_RESULT_VOID(cmdArchivePush(), "publish branch only to destination");
+        TEST_RESULT_LOG("P00   INFO: pushed WAL file '00000002.history' to the archive");
+        TEST_STORAGE_GET(storageRepoIdx(1), STORAGE_REPO_ARCHIVE "/16-1/00000002.history", "1\t0/2800000\tfork\n");
+        TEST_RESULT_BOOL(
+            storageExistsP(storageRepoIdx(0), STRDEF(STORAGE_REPO_ARCHIVE "/16-1/00000002.history")), false,
+            "source repository is never a push destination");
+        const InfoFork *const info = forkInfoLoad(1);
+        TEST_RESULT_UINT(infoForkData(info)->ownTimeline, 2, "history push persisted the branch");
+        TEST_RESULT_BOOL(
+            archiveForkWalAllowed(info, STRDEF("000000010000000000000002"), false), false,
+            "history publication closes the old boundary");
+
+        HRN_STORAGE_PUT_Z(storagePgWrite(), "pg_wal/00000003.history", "1\t0/2800000\tfork\n2\t0/2700000\tinvalid\n");
+        historyArgs = strLstDup(args);
+        strLstAddZ(historyArgs, TEST_PATH "/pg/pg_wal/00000003.history");
+        HRN_CFG_LOAD(cfgCmdArchivePush, historyArgs);
+        TEST_ERROR(cmdArchivePush(), FormatError, "invalid fork timeline history");
+        TEST_RESULT_LOG("");
+        TEST_RESULT_BOOL(
+            storageExistsP(storageRepoIdx(1), STRDEF(STORAGE_REPO_ARCHIVE "/16-1/00000003.history")), false,
+            "invalid history never becomes visible");
+
+        TEST_TITLE("history push retry saves metadata before publication");
+
+        HRN_STORAGE_PUT_Z(storagePgWrite(), "pg_wal/00000003.history", "1\t0/2800000\tfork\n2\t0/3800000\tnext\n");
+        HRN_STORAGE_PATH_CREATE(storageRepoIdxWrite(1), INFO_FORK_PATH_FILE INFO_COPY_EXT "." STORAGE_FILE_TEMP_EXT);
+        TEST_ERROR(
+            cmdArchivePush(), FileOpenError,
+            "unable to open file '" TEST_PATH "/child/backup/child/fork.info.copy' for write: [21] Is a directory");
+        TEST_RESULT_LOG("");
+        TEST_RESULT_UINT(infoForkData(forkInfoLoad(1))->historyTimeline, 2, "failed copy write leaves main metadata unchanged");
+        TEST_RESULT_BOOL(
+            storageExistsP(storageRepoIdx(1), STRDEF(STORAGE_REPO_ARCHIVE "/16-1/00000003.history")), false,
+            "failed copy write never publishes history");
+        HRN_STORAGE_PATH_REMOVE(storageRepoIdxWrite(1), INFO_FORK_PATH_FILE INFO_COPY_EXT "." STORAGE_FILE_TEMP_EXT);
+
+        HRN_STORAGE_PATH_CREATE(storageRepoIdxWrite(1), INFO_FORK_PATH_FILE "." STORAGE_FILE_TEMP_EXT);
+        TEST_ERROR(
+            cmdArchivePush(), FileOpenError,
+            "unable to open file '" TEST_PATH "/child/backup/child/fork.info' for write: [21] Is a directory");
+        TEST_RESULT_LOG("");
+        TEST_RESULT_UINT(infoForkData(forkInfoLoad(1))->historyTimeline, 2, "failed main write preserves the previous timeline");
+        TEST_RESULT_UINT(
+            infoForkData(
+                infoForkLoadFile(
+                    storageRepoIdx(1), STRDEF(INFO_FORK_PATH_FILE INFO_COPY_EXT),
+                    cfgCipherSpecMainIdx(1)))->historyTimeline,
+            3, "copy metadata already accepted the later promotion");
+        TEST_RESULT_BOOL(
+            storageExistsP(storageRepoIdx(1), STRDEF(STORAGE_REPO_ARCHIVE "/16-1/00000003.history")), false,
+            "history is not published when metadata persistence fails");
+
+        HRN_STORAGE_PATH_REMOVE(storageRepoIdxWrite(1), INFO_FORK_PATH_FILE "." STORAGE_FILE_TEMP_EXT);
+        TEST_RESULT_VOID(cmdArchivePush(), "retry completes both metadata writes");
+        TEST_RESULT_LOG("P00   INFO: pushed WAL file '00000003.history' to the archive");
+        TEST_STORAGE_GET(
+            storageRepoIdx(1), STORAGE_REPO_ARCHIVE "/16-1/00000003.history", "1\t0/2800000\tfork\n2\t0/3800000\tnext\n");
+        TEST_RESULT_BOOL(
+            bufEq(
+                storageGetP(storageNewReadP(storageRepoIdx(1), STRDEF(INFO_FORK_PATH_FILE))),
+                storageGetP(storageNewReadP(storageRepoIdx(1), STRDEF(INFO_FORK_PATH_FILE INFO_COPY_EXT)))),
+            true, "successful retry leaves identical metadata copies");
+
+        storageRemoveP(storageRepoIdxWrite(1), STRDEF(INFO_FORK_PATH_FILE));
+        const InfoFork *const recovered = forkInfoLoad(1);
+        TEST_RESULT_UINT(infoForkData(recovered)->historyTimeline, 3, "copy fallback retains the later promotion");
+        TEST_RESULT_BOOL(
+            archiveForkWalAllowed(recovered, STRDEF("000000020000000000000003"), false), false,
+            "copy fallback still hides the closed timeline boundary");
+
+        // Keep PostgreSQL timeline history unchanged. Normalize only the WAL ranges in fork metadata.
+        InfoForkData ancestor = data;
+        ancestor.sourceTimeline = 3;
+        ancestor.sourceHistory = STRDEF("1\t0/4000000\tselected source\n");
+        infoForkSaveFile(
+            infoForkNew(6, &ancestor), storageRepoIdxWrite(1), STRDEF(INFO_FORK_PATH_FILE), cfgCipherSpecMainIdx(1));
+        HRN_STORAGE_PUT_Z(
+            storagePgWrite(), "pg_wal/00000004.history", "1\t0/4000000\tselected source\n3\t0/2800000\tancestor stop\n");
+        historyArgs = strLstDup(args);
+        strLstAddZ(historyArgs, TEST_PATH "/pg/pg_wal/00000004.history");
+        HRN_CFG_LOAD(cfgCmdArchivePush, historyArgs);
+        TEST_RESULT_VOID(cmdArchivePush(), "archive raw ancestor history");
+        TEST_RESULT_LOG("P00   INFO: pushed WAL file '00000004.history' to the archive");
+        TEST_STORAGE_GET(storageRepoIdx(1), STORAGE_REPO_ARCHIVE "/16-1/00000004.history",
+                         "1\t0/4000000\tselected source\n3\t0/2800000\tancestor stop\n");
+        TEST_STORAGE_GET(storagePg(), "pg_wal/00000004.history",
+                         "1\t0/4000000\tselected source\n3\t0/2800000\tancestor stop\n");
+        TEST_RESULT_STR(
+            infoForkData(forkInfoLoad(1))->history, STRDEF("1\t0/2800000\tancestor stop\n"),
+            "internal metadata follows the actual ancestor branch");
+        TEST_RESULT_VOID(cmdArchivePush(), "retry preserves raw archived history");
+        TEST_RESULT_LOG("P00   INFO: pushed WAL file '00000004.history' to the archive");
+        HRN_STORAGE_PUT_Z(storagePgWrite(), "pg_wal/00000004.history", "1\t0/4000000\tselected source\n3\t0/2900000\tchanged\n");
+        TEST_ERROR(
+            cmdArchivePush(), ArchiveDuplicateError,
+            "timeline history '00000004.history' already exists in the repo2 archive with different content");
+        TEST_RESULT_LOG("");
+        TEST_STORAGE_GET(storageRepoIdx(1), STORAGE_REPO_ARCHIVE "/16-1/00000004.history",
+                         "1\t0/4000000\tselected source\n3\t0/2800000\tancestor stop\n");
+
+        HRN_STORAGE_PUT_Z(
+            storagePgWrite(), "pg_wal/00000005.history",
+            "1\t0/4000000\tselected source\n3\t0/2800000\tancestor stop\n4\t0/3800000\tnext\n");
+        historyArgs = strLstDup(args);
+        strLstAddZ(historyArgs, TEST_PATH "/pg/pg_wal/00000005.history");
+        HRN_CFG_LOAD(cfgCmdArchivePush, historyArgs);
+        TEST_RESULT_VOID(cmdArchivePush(), "later promotion retains the raw ancestor prefix");
+        TEST_RESULT_LOG("P00   INFO: pushed WAL file '00000005.history' to the archive");
+        TEST_STORAGE_GET(
+            storageRepoIdx(1), STORAGE_REPO_ARCHIVE "/16-1/00000005.history",
+            "1\t0/4000000\tselected source\n3\t0/2800000\tancestor stop\n4\t0/3800000\tnext\n");
+        TEST_STORAGE_GET(
+            storagePg(), "pg_wal/00000005.history",
+            "1\t0/4000000\tselected source\n3\t0/2800000\tancestor stop\n4\t0/3800000\tnext\n");
+        const InfoFork *const promoted = forkInfoLoad(1);
+        TEST_RESULT_UINT(infoForkData(promoted)->ownTimeline, 4, "first own timeline remains the branch");
+        TEST_RESULT_STR(
+            infoForkData(promoted)->history, STRDEF("1\t0/2800000\tancestor stop\n4\t0/3800000\tnext\n"),
+            "later promotion extends only the internal accepted lineage");
+        TEST_RESULT_BOOL(
+            archiveForkWalAllowed(promoted, STRDEF("000000040000000000000003"), false), false,
+            "missing successor WAL cannot reopen its predecessor's boundary");
+        TEST_RESULT_VOID(cmdArchivePush(), "retry later raw promotion");
+        TEST_RESULT_LOG("P00   INFO: pushed WAL file '00000005.history' to the archive");
+
+        HRN_STORAGE_PUT_Z(
+            storagePgWrite(), "pg_wal/00000006.history",
+            "1\t0/4100000\tunknown source\n3\t0/2800000\tancestor stop\n4\t0/3800000\tnext\n5\t0/4800000\tnext\n");
+        historyArgs = strLstDup(args);
+        strLstAddZ(historyArgs, TEST_PATH "/pg/pg_wal/00000006.history");
+        HRN_CFG_LOAD(cfgCmdArchivePush, historyArgs);
+        TEST_ERROR(cmdArchivePush(), ArchiveMismatchError, "new timeline history does not extend the fork lineage");
+        TEST_RESULT_LOG("");
+        TEST_RESULT_BOOL(
+            storageExistsP(storageRepoIdx(1), STRDEF(STORAGE_REPO_ARCHIVE "/16-1/00000006.history")), false,
+            "unknown backward prefix is never published");
+        HRN_STORAGE_PUT_Z(
+            storagePgWrite(), "pg_wal/00000006.history",
+            "1\t0/2800000\tancestor stop\n4\t0/3800000\tnext\n5\t0/4800000\tnext\n");
+        TEST_RESULT_VOID(cmdArchivePush(), "correct PostgreSQL history also extends the accepted lineage");
+        TEST_RESULT_LOG("P00   INFO: pushed WAL file '00000006.history' to the archive");
+        TEST_STORAGE_GET(
+            storageRepoIdx(1), STORAGE_REPO_ARCHIVE "/16-1/00000006.history",
+            "1\t0/2800000\tancestor stop\n4\t0/3800000\tnext\n5\t0/4800000\tnext\n");
     }
 
     FUNCTION_HARNESS_RETURN_VOID();

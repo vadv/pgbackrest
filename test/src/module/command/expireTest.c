@@ -3420,5 +3420,33 @@ testRun(void)
         harnessLogLevelReset();
     }
 
+    // *****************************************************************************************************************************
+    if (testBegin("fork pins protect source backups before metadata reconstruction"))
+    {
+        StringList *const args = strLstNew();
+        hrnCfgArgRawZ(args, cfgOptStanza, "source");
+        hrnCfgArgRawZ(args, cfgOptRepoPath, TEST_PATH "/repo");
+        hrnCfgArgRawZ(args, cfgOptRepoRetentionFull, "1");
+        HRN_CFG_LOAD(cfgCmdExpire, args);
+        HRN_STORAGE_PUT_Z(storageRepoWrite(), INFO_BACKUP_PATH_FILE, "unchanged metadata");
+        HRN_STORAGE_PUT_Z(storageRepoWrite(), STORAGE_REPO_BACKUP "/20261008-120000F/backup.manifest", "unchanged manifest");
+        HRN_STORAGE_PUT_Z(storageRepoWrite(), STORAGE_REPO_BACKUP "/20261008-120000F/bundle/1", "inherited data");
+        HRN_STORAGE_PUT_Z(storageRepoWrite(), STORAGE_REPO_ARCHIVE "/16-1/0000000100000000/wal", "inherited WAL");
+        HRN_STORAGE_PUT_EMPTY(storageRepoWrite(), STORAGE_REPO_BACKUP "/fork-pin/child.info.copy");
+        TEST_RESULT_VOID(cmdExpire(), "skip every expiration mutation while a pin survives");
+        TEST_RESULT_LOG("P00   WARN: repo1: expiration deferred because the stanza has dependent forks");
+        TEST_STORAGE_GET(storageRepo(), INFO_BACKUP_PATH_FILE, "unchanged metadata");
+        TEST_STORAGE_GET(storageRepo(), STORAGE_REPO_BACKUP "/20261008-120000F/backup.manifest", "unchanged manifest");
+        TEST_STORAGE_GET(storageRepo(), STORAGE_REPO_BACKUP "/20261008-120000F/bundle/1", "inherited data");
+        TEST_STORAGE_GET(storageRepo(), STORAGE_REPO_ARCHIVE "/16-1/0000000100000000/wal", "inherited WAL");
+
+        StringList *const adhocArgs = strLstDup(args);
+        hrnCfgArgRawZ(adhocArgs, cfgOptSet, "20261008-120000F");
+        HRN_CFG_LOAD(cfgCmdExpire, adhocArgs);
+        TEST_ERROR(
+            cmdExpire(), FileInvalidError, "repo1: cannot expire a selected backup while the stanza has dependent forks");
+        TEST_STORAGE_GET(storageRepo(), STORAGE_REPO_BACKUP "/20261008-120000F/backup.manifest", "unchanged manifest");
+    }
+
     FUNCTION_HARNESS_RETURN_VOID();
 }

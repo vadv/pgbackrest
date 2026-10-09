@@ -14,6 +14,7 @@ Backup Command
 #include "command/backup/protocol.h"
 #include "command/check/common.h"
 #include "command/control/common.h"
+#include "command/fork/common.h"
 #include "command/lock.h"
 #include "command/stanza/common.h"
 #include "common/compress/helper.h"
@@ -208,6 +209,22 @@ cmdBackup(void)
 
         // Get the repo storage in case it is remote and encryption settings need to be pulled down
         storageRepo();
+
+        const InfoFork *const fork = forkInfoLoad(cfgOptionGroupIdxDefault(cfgOptGrpRepo));
+
+        if (fork != NULL)
+        {
+            CHECK(
+                OptionInvalidError, infoForkData(fork)->ownTimeline != 0,
+                "fork has no archived branch; archive the primary's timeline history before taking a backup");
+
+            // Source files can be on another filesystem or in an object store. Keep file references in the manifest.
+            if (cfgOptionBool(cfgOptRepoHardlink))
+            {
+                LOG_INFO("disable repo-hardlink for a stanza with inherited backup files");
+                cfgOptionSet(cfgOptRepoHardlink, cfgSourceParam, BOOL_FALSE_VAR);
+            }
+        }
 
         // Load backup.info
         InfoBackup *const infoBackup = infoBackupLoadFileReconstruct(storageRepo(), INFO_BACKUP_PATH_FILE_STR, cfgCipherSpecMain());

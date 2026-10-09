@@ -1507,6 +1507,15 @@ testRun(void)
         TEST_RESULT_VOID(manifestSave(manifest, ioBufferWriteNew(contentSave)), "save manifest");
         TEST_RESULT_STR(strNewBuf(contentSave), strNewBuf(contentLoad), "check save");
 
+        const Manifest *const plaintextManifest = manifestNewLoad(ioBufferReadNew(contentSave), cipherSpecNewNone());
+        TEST_RESULT_UINT(manifestFormat(plaintextManifest), REPOSITORY_FORMAT_6, "plaintext manifest keeps format");
+        TEST_RESULT_UINT(
+            cipherSpecType(manifestCipherSpec(plaintextManifest)), cipherTypeAes256Cbc, "plaintext manifest keeps payload cipher");
+        TEST_RESULT_UINT(
+            cipherSpecDigest(manifestCipherSpec(plaintextManifest)), hashTypeSha256, "plaintext manifest keeps payload key digest");
+        TEST_RESULT_STR_Z(
+            strNewBuf(cipherSpecPass(manifestCipherSpec(plaintextManifest))), "somepass", "plaintext manifest keeps payload key");
+
         // -------------------------------------------------------------------------------------------------------------------------
         TEST_TITLE("manifest - all features");
 

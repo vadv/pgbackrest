@@ -10,6 +10,7 @@ Stanza Upgrade Command
 
 #include "command/check/common.h"
 #include "command/control/common.h"
+#include "command/fork/common.h"
 #include "command/stanza/common.h"
 #include "command/stanza/upgrade.h"
 #include "common/debug.h"
@@ -59,6 +60,15 @@ cmdStanzaUpgrade(void)
             InfoBackup *const infoBackup = infoBackupLoadFile(
                 storageRepoReadStanza, INFO_BACKUP_PATH_FILE_STR, cfgCipherSpecMainIdx(repoIdx));
             InfoPgData backupInfo = infoPgData(infoBackupPg(infoBackup), infoPgDataCurrentId(infoBackupPg(infoBackup)));
+
+            // Keep the PostgreSQL identity during repository format upgrades. Source manifests and WAL selection depend on it.
+            const InfoFork *const fork = forkInfoLoad(repoIdx);
+
+            CHECK(
+                FeatureNotSupportedError,
+                fork == NULL || (infoForkData(fork)->pgVersion == pgControl.version &&
+                                 infoForkData(fork)->systemId == pgControl.systemId),
+                "cannot upgrade the PostgreSQL identity of an inherited stanza");
 
             // Determine the format to write. An upgrade interrupted between the two info file saves leaves them at different
             // formats and the higher of the two is the only target that does not downgrade a file, so it is written to both even

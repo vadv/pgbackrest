@@ -3,6 +3,9 @@ Verify File
 ***********************************************************************************************************************************/
 #include <build.h>
 
+#include "command/fork/common.h"
+#include "config/config.h"
+
 #include "command/verify/file.h"
 #include "common/crypto/cipherBlock.h"
 #include "common/crypto/hash.h"
@@ -43,7 +46,9 @@ verifyFile(
     {
         // Prepare the file for reading
         IoRead *const read = storageReadIo(
-            storageNewReadP(storageRepo(), filePathName, .ignoreMissing = true, .offset = offset, .limit = limit));
+            storageNewReadP(
+                forkStorageRepoIdx(cfgOptionGroupIdxDefault(cfgOptGrpRepo)), filePathName, .ignoreMissing = true,
+                .offset = offset, .limit = limit));
         IoFilterGroup *const filterGroup = ioReadFilterGroup(read);
 
         // Add decryption filter

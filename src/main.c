@@ -17,6 +17,7 @@ Main
 #include "command/control/stop.h"
 #include "command/exit.h"
 #include "command/expire/expire.h"
+#include "command/fork/fork.h"
 #include "command/help/help.h"
 #include "command/info/info.h"
 #include "command/local/local.h"
@@ -173,6 +174,12 @@ main(int argListSize, const char *argList[])
                 // -----------------------------------------------------------------------------------------------------------------
                 case cfgCmdExpire:
                     cmdExpire();
+                    break;
+
+                // Fork command
+                // -----------------------------------------------------------------------------------------------------------------
+                case cfgCmdFork:
+                    cmdFork();
                     break;
 
                 // Info command

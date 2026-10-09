@@ -10,6 +10,7 @@ Stanza Create Command
 
 #include "command/check/common.h"
 #include "command/control/common.h"
+#include "command/fork/common.h"
 #include "command/stanza/common.h"
 #include "command/stanza/create.h"
 #include "common/debug.h"
@@ -50,6 +51,7 @@ cmdStanzaCreate(void)
                 cfgOptionGroupName(cfgOptGrpRepo, repoIdx));
 
             const Storage *const storageRepoReadStanza = storageRepoIdx(repoIdx);
+            forkInfoLoad(repoIdx);
             const Storage *const storageRepoWriteStanza = storageRepoIdxWrite(repoIdx);
             InfoArchive *infoArchive = NULL;
             InfoBackup *infoBackup = NULL;

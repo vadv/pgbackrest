@@ -11,6 +11,7 @@ Verify contents of the repository.
 
 #include "command/archive/common.h"
 #include "command/check/common.h"
+#include "command/fork/common.h"
 #include "command/verify/file.h"
 #include "command/verify/protocol.h"
 #include "command/verify/verify.h"
@@ -1576,6 +1577,7 @@ verifyProcess(const bool verboseText)
 
         // Get the repo storage in case it is remote and encryption settings need to be pulled down
         const Storage *const storage = storageRepo();
+        forkInfoLoad(cfgOptionGroupIdxDefault(cfgOptGrpRepo));
 
         // Get a usable backup info file
         const InfoBackup *const backupInfo = verifyBackupInfoFile();

@@ -54,6 +54,7 @@ testRun(void)
         "    backup          backup a database cluster\n"
         "    check           check the configuration\n"
         "    expire          expire backups that exceed retention\n"
+        "    fork            create a PITR fork for primary and standby recovery\n"
         "    help            get help\n"
         "    info            retrieve information about backups\n"
         "    repo-get        get a file from a repository\n"

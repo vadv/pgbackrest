@@ -78,6 +78,10 @@ command:
     lock-required: true
     lock-type: backup
 
+  fork:
+    lock-required: true
+    lock-type: restore
+
   help:
     log-file: false
     log-level-default: DEBUG
@@ -403,6 +407,9 @@ option:
       manifest:
         default: latest
         required: true
+      fork:
+        default: latest
+        required: true
       restore:
         default: latest
         required: true
@@ -416,6 +423,22 @@ option:
     default: false
     command:
       check: {}
+    command-role:
+      main: {}
+
+  source-repo:
+    type: integer
+    required: false
+    allow-range: [1, 256]
+    command:
+      fork: {}
+    command-role:
+      main: {}
+
+  source-stanza:
+    type: string
+    command:
+      fork: {}
     command-role:
       main: {}
 
@@ -441,6 +464,7 @@ option:
       repo-rm:
         required: false
         internal: true
+      fork: {}
       restore: {}
       stanza-create: {}
       stanza-delete: {}
@@ -454,6 +478,7 @@ option:
   target:
     type: string
     command:
+      fork: {}
       restore: {}
     depend:
       option: type
@@ -489,6 +514,7 @@ option:
     type: boolean
     default: false
     command:
+      fork: {}
       restore: {}
     depend:
       option: type
@@ -503,6 +529,7 @@ option:
     type: string
     required: false
     command:
+      fork: {}
       restore: {}
     depend:
       option: type
@@ -531,6 +558,20 @@ option:
           - full
           - diff
           - incr
+      # Use restore's packed value table. The fork command checks target types before it writes metadata.
+      fork:
+        sequence: true
+        allow-list:
+          - default
+          - preserve
+          - immediate
+          - standby
+          - none
+          - name
+          - time
+          - lsn
+          - xid
+        default: default
       restore:
         sequence: true
         allow-list:
@@ -846,6 +887,7 @@ option:
       backup: {}
       expire: {}
       info: {}
+      fork: {}
       restore: {}
       stanza-create: {}
       stanza-delete: {}
@@ -1654,6 +1696,7 @@ option:
       archive-get: {}
       archive-push:
         command-role:
+          main: {}
           remote: {}
       backup: {}
       check:
@@ -1665,6 +1708,7 @@ option:
       repo-get: {}
       repo-ls: {}
       repo-rm: {}
+      fork: {}
       restore: {}
       stanza-create:
         command-role:

@@ -710,6 +710,25 @@ testRun(void)
             restoreManifestValidate(manifest, STRDEF("20161219-212741F_20161219-212918I")), FormatError,
             "requested backup '20161219-212741F_20161219-212918I' and manifest label '20161219-212741F' do not match\n"
             "HINT: this indicates some sort of corruption (at the very least paths have been renamed).");
+
+        TEST_TITLE("fork restore excludes archived WAL and history from pg_wal and pg_xlog");
+
+        const StringList *const files = strLstNewSplitZ(
+            STRDEF(
+                "pg_data/pg_wal/000000010000000000000001,pg_data/pg_wal/00000002.history,"
+                "pg_data/pg_xlog/000000010000000000000002.partial,pg_data/base/1/123"), ",");
+
+        for (unsigned int idx = 0; idx < strLstSize(files); idx++)
+        {
+            ManifestFile file = {.name = strLstGet(files, idx)};
+            manifestFileAdd(manifest, &file);
+        }
+
+        TEST_RESULT_VOID(restoreForkManifestClean(manifest), "remove WAL that could bypass the fork archive policy");
+        TEST_RESULT_BOOL(manifestFileExists(manifest, strLstGet(files, 0)), false, "remove copied WAL");
+        TEST_RESULT_BOOL(manifestFileExists(manifest, strLstGet(files, 1)), false, "remove copied history");
+        TEST_RESULT_BOOL(manifestFileExists(manifest, strLstGet(files, 2)), false, "remove old-directory partial WAL");
+        TEST_RESULT_BOOL(manifestFileExists(manifest, strLstGet(files, 3)), true, "preserve ordinary relation files");
     }
 
     // *****************************************************************************************************************************
@@ -1005,6 +1024,165 @@ testRun(void)
         TEST_RESULT_LOG(
             "P00   WARN: file link 'pg_hba.conf' will be restored as a file at the same location\n"
             "P00   WARN: contents of directory link 'pg_wal' will be restored in a directory at the same location");
+
+        // -------------------------------------------------------------------------------------------------------------------------
+        TEST_TITLE("fork tablespaces use separate paths and keep explicit mappings");
+
+        Manifest *const forkManifest = testManifestMinimal(
+            STRDEF("20161219-212741F"), PG_VERSION_18, STRDEF(TEST_PATH "/fork-source"));
+        HRN_MANIFEST_TARGET_ADD(
+            forkManifest, .name = "pg_tblspc/42", .path = TEST_PATH "/fork-source-ts", .tablespaceId = 42,
+            .tablespaceName = "source_ts", .type = manifestTargetTypeLink);
+        HRN_MANIFEST_LINK_ADD(forkManifest, .name = "pg_data/pg_tblspc/42", .destination = TEST_PATH "/fork-source-ts");
+        HRN_MANIFEST_TARGET_ADD(
+            forkManifest, .name = "pg_tblspc/43", .path = TEST_PATH "/fork-source-ts2", .tablespaceId = 43,
+            .tablespaceName = "other_ts", .type = manifestTargetTypeLink);
+        HRN_MANIFEST_LINK_ADD(forkManifest, .name = "pg_data/pg_tblspc/43", .destination = TEST_PATH "/fork-source-ts2");
+        const InfoFork *const fork = infoForkNew(
+            REPOSITORY_FORMAT_DEFAULT,
+            &(InfoForkData)
+        {
+            .sourceId = STRDEF("source"), .sourceRepoKey = 1, .sourceStanza = STRDEF("source"),
+            .sourceArchiveId = STRDEF("18-1"), .backupLabel = STRDEF("20161219-212741F"),
+            .importedBackupList = strLstNewSplitZ(STRDEF("20161219-212741F"), ","), .pgVersion = PG_VERSION_18,
+            .systemId = 1, .walSegmentSize = 16 * 1024 * 1024, .sourceTimeline = 1, .sourceHistory = EMPTY_STR,
+            .targetType = STRDEF("lsn"), .targetValue = STRDEF("0/5000000"), .history = EMPTY_STR,
+        });
+        argList = strLstNew();
+        hrnCfgArgRawZ(argList, cfgOptStanza, "test1");
+        hrnCfgArgRaw(argList, cfgOptRepoPath, repoPath);
+        hrnCfgArgRawZ(argList, cfgOptPgPath, TEST_PATH "/fork-child");
+        hrnCfgArgRawZ(argList, cfgOptTablespaceMap, "other_ts=" TEST_PATH "/fork-explicit");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        StringList *sourcePaths = restoreForkMap(forkManifest, fork, 0);
+        TEST_RESULT_VOID(restoreManifestMap(forkManifest), "apply fork maps");
+        TEST_RESULT_STR_Z(
+            manifestTargetFind(forkManifest, STRDEF("pg_tblspc/42"))->path, TEST_PATH "/fork-child.tablespaces/42",
+            "unmapped tablespace uses its OID outside PGDATA");
+        TEST_RESULT_STR_Z(
+            manifestTargetFind(forkManifest, STRDEF("pg_tblspc/43"))->path, TEST_PATH "/fork-explicit",
+            "explicit tablespace destination is preserved");
+        TEST_RESULT_VOID(restoreForkMapValidate(forkManifest, sourcePaths), "safe destinations do not overlap source data");
+        TEST_RESULT_LOG(
+            "P00   INFO: map tablespace 'pg_tblspc/42' to '" TEST_PATH "/fork-child.tablespaces/42'\n"
+            "P00   INFO: remap data directory to '" TEST_PATH "/fork-child'\n"
+            "P00   INFO: map tablespace 'pg_tblspc/43' to '" TEST_PATH "/fork-explicit'");
+
+        TEST_TITLE("fork resolves paths and links before it checks for source overlap");
+
+        const String *const canonicalBase = restoreForkPath(STRDEF(TEST_PATH));
+        manifestTargetUpdate(forkManifest, STRDEF("pg_tblspc/42"), STRDEF(TEST_PATH "/unused/../fork-source/child"), NULL);
+        TEST_ERROR_FMT(
+            restoreForkMapValidate(forkManifest, sourcePaths), OptionInvalidError,
+            "fork restore destination '%s/fork-source/child' overlaps source path '%s/fork-source'",
+            strZ(canonicalBase), strZ(canonicalBase));
+        manifestTargetUpdate(forkManifest, STRDEF("pg_tblspc/42"), STRDEF(TEST_PATH), NULL);
+        TEST_ERROR_FMT(
+            restoreForkMapValidate(forkManifest, sourcePaths), OptionInvalidError,
+            "fork restore destination '%s' overlaps source path '%s/fork-source'", strZ(canonicalBase), strZ(canonicalBase));
+
+        storagePathCreateP(storageLocalWrite(), STRDEF(TEST_PATH "/fork-source/nested"));
+        storageLinkCreateP(storageLocalWrite(), STRDEF("fork-source/nested"), STRDEF(TEST_PATH "/fork-alias"));
+        TEST_RESULT_STR(
+            restoreForkPath(STRDEF(TEST_PATH "/fork-alias/../new")), strNewFmt("%s/fork-source/new", strZ(canonicalBase)),
+            "resolve symlink before dot-dot");
+        manifestTargetUpdate(forkManifest, STRDEF("pg_tblspc/42"), STRDEF(TEST_PATH "/fork-alias/../new"), NULL);
+        TEST_ERROR_FMT(
+            restoreForkMapValidate(forkManifest, sourcePaths), OptionInvalidError,
+            "fork restore destination '%s/fork-source/new' overlaps source path '%s/fork-source'",
+            strZ(canonicalBase), strZ(canonicalBase));
+
+        storageLinkCreateP(storageLocalWrite(), STRDEF("fork-cycle"), STRDEF(TEST_PATH "/fork-cycle"));
+        TEST_ERROR(
+            restoreForkPath(STRDEF(TEST_PATH "/fork-cycle/new")), LinkMapError,
+            "too many symbolic links in fork restore path '" TEST_PATH "/fork-cycle/new'");
+
+        TEST_TITLE("fork permits links only when they use separate storage");
+
+        Manifest *const linkManifest = testManifestMinimal(
+            STRDEF("20161219-212741F"), PG_VERSION_18, STRDEF(TEST_PATH "/fork-source"));
+        HRN_MANIFEST_TARGET_ADD(
+            linkManifest, .name = "pg_data/pg_wal", .path = TEST_PATH "/fork-source-wal", .type = manifestTargetTypeLink);
+        HRN_MANIFEST_LINK_ADD(linkManifest, .name = "pg_data/pg_wal", .destination = TEST_PATH "/fork-source-wal");
+        argList = strLstNew();
+        hrnCfgArgRawZ(argList, cfgOptStanza, "test1");
+        hrnCfgArgRaw(argList, cfgOptRepoPath, repoPath);
+        hrnCfgArgRawZ(argList, cfgOptPgPath, TEST_PATH "/fork-child");
+        hrnCfgArgRawBool(argList, cfgOptLinkAll, true);
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        sourcePaths = restoreForkMap(linkManifest, fork, 0);
+        restoreManifestMap(linkManifest);
+        TEST_ERROR_FMT(
+            restoreForkMapValidate(linkManifest, sourcePaths), OptionInvalidError,
+            "fork restore destination '%s/fork-source-wal' overlaps source path '%s/fork-source-wal'",
+            strZ(canonicalBase), strZ(canonicalBase));
+        TEST_RESULT_LOG("P00   INFO: remap data directory to '" TEST_PATH "/fork-child'");
+
+        hrnCfgArgRawZ(argList, cfgOptLinkMap, "pg_wal=" TEST_PATH "/fork-child-wal");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        TEST_RESULT_VOID(restoreManifestMap(linkManifest), "explicit link map selects isolated WAL storage");
+        TEST_RESULT_VOID(restoreForkMapValidate(linkManifest, sourcePaths), "isolated link is safe");
+        TEST_RESULT_LOG("P00   INFO: map link 'pg_wal' to '" TEST_PATH "/fork-child-wal'");
+
+        TEST_TITLE("same PGDATA name on another host requires an empty destination");
+
+        Manifest *const sameManifest = testManifestMinimal(
+            STRDEF("20161219-212741F"), PG_VERSION_18, STRDEF(TEST_PATH "/same-pg"));
+        argList = strLstNew();
+        hrnCfgArgRawZ(argList, cfgOptStanza, "test1");
+        hrnCfgArgRaw(argList, cfgOptRepoPath, repoPath);
+        hrnCfgArgRawZ(argList, cfgOptPgPath, TEST_PATH "/same-pg");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        sourcePaths = restoreForkMap(sameManifest, fork, 0);
+        TEST_RESULT_VOID(restoreManifestMap(sameManifest), "empty destination may use the same PGDATA name");
+        TEST_RESULT_VOID(restoreForkMapValidate(sameManifest, sourcePaths), "empty destination is safe");
+
+        HRN_STORAGE_PUT_Z(storageLocalWrite(), TEST_PATH "/same-pg/PG_VERSION", "18");
+        sourcePaths = restoreForkMap(sameManifest, fork, 0);
+        TEST_ERROR_FMT(
+            restoreForkMapValidate(sameManifest, sourcePaths), OptionInvalidError,
+            "fork restore destination '%s/same-pg' overlaps source path '%s/same-pg'", strZ(canonicalBase), strZ(canonicalBase));
+
+        hrnCfgArgKeyRawZ(argList, cfgOptRepoPath, 2, TEST_PATH "/another-repo");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        const String *const selectedRepoIdentity = restoreForkIdentity(sameManifest, fork, 1);
+        cfgOptionSet(cfgOptRepo, cfgSourceParam, VARINT64(2));
+        TEST_RESULT_UINT(
+            cfgOptionGroupIdxDefault(cfgOptGrpRepo), 0, "automatic backup selection does not change the default index");
+        TEST_RESULT_STR(restoreForkIdentity(sameManifest, fork, 1), selectedRepoIdentity, "marker uses the selected repository");
+        TEST_RESULT_BOOL(
+            strEq(restoreForkIdentity(sameManifest, fork, 0), selectedRepoIdentity), false,
+            "a different destination repository cannot claim the partial restore");
+
+        const String *const restoreIdentity = restoreForkIdentity(sameManifest, fork, 0);
+        storagePutP(storageNewWriteP(storagePgWrite(), STRDEF(RESTORE_FORK_FILE)), BUFSTR(restoreIdentity));
+        sourcePaths = restoreForkMap(sameManifest, fork, 0);
+        TEST_RESULT_VOID(restoreForkMapValidate(sameManifest, sourcePaths), "same fork can resume its interrupted restore");
+
+        cfgOptionSet(cfgOptStanza, cfgSourceParam, VARSTRDEF("another-child"));
+        sourcePaths = restoreForkMap(sameManifest, fork, 0);
+        TEST_ERROR_FMT(
+            restoreForkMapValidate(sameManifest, sourcePaths), OptionInvalidError,
+            "fork restore destination '%s/same-pg' overlaps source path '%s/same-pg'", strZ(canonicalBase), strZ(canonicalBase));
+        cfgOptionSet(cfgOptStanza, cfgSourceParam, VARSTRDEF("test1"));
+
+        InfoForkData otherSource = *infoForkData(fork);
+        otherSource.sourceId = STRDEF("another-source");
+        sourcePaths = restoreForkMap(sameManifest, infoForkNew(REPOSITORY_FORMAT_DEFAULT, &otherSource), 0);
+        TEST_ERROR_FMT(
+            restoreForkMapValidate(sameManifest, sourcePaths), OptionInvalidError,
+            "fork restore destination '%s/same-pg' overlaps source path '%s/same-pg'", strZ(canonicalBase), strZ(canonicalBase));
+
+        HRN_STORAGE_PATH_REMOVE(storageLocalWrite(), TEST_PATH "/same-pg", .recurse = true);
+
+        HRN_MANIFEST_TARGET_ADD(
+            sameManifest, .name = "pg_data/pg_wal", .path = TEST_PATH "/outside-pg", .type = manifestTargetTypeLink);
+        HRN_MANIFEST_LINK_ADD(sameManifest, .name = "pg_data/pg_wal", .destination = TEST_PATH "/outside-pg");
+        sourcePaths = restoreForkMap(sameManifest, fork, 0);
+        TEST_ERROR_FMT(
+            restoreForkMapValidate(sameManifest, sourcePaths), OptionInvalidError,
+            "fork restore destination '%s/outside-pg' overlaps source path '%s/outside-pg'",
+            strZ(canonicalBase), strZ(canonicalBase));
     }
 
     // *****************************************************************************************************************************
@@ -1657,7 +1835,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_18, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_18, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "a_setting = 'a'\n"
             "b_setting = 'b'\n"
@@ -1673,7 +1851,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_18, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_18, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = '/usr/local/bin/pg_wrapper.sh --beta --lock-path=" HRN_PATH "/lock --log-path=" HRN_PATH
             " --pg1-path=/pg --repo1-path=/repo --stanza=test1 archive-get %f \"%p\"'\n",
@@ -1687,7 +1865,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_18, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_18, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n",
             "check recovery options");
@@ -1700,7 +1878,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_11, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_11, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n"
             "recovery_target = 'immediate'\n",
@@ -1714,7 +1892,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_12, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_12, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n"
             "recovery_target = 'immediate'\n"
@@ -1731,7 +1909,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_11, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_11, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n"
             "recovery_target_time = 'TIME'\n"
@@ -1748,7 +1926,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_18, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_18, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n"
             "recovery_target_time = 'TIME'\n"
@@ -1764,7 +1942,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_18, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_18, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n"
             "recovery_target_name = 'NAME'\n",
@@ -1779,7 +1957,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_10, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_10, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n"
             "recovery_target_lsn = '5218/5E35BBA8'\n",
@@ -1794,7 +1972,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_11, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_11, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n"
             "recovery_target = 'immediate'\n"
@@ -1809,7 +1987,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_11, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_11, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n"
             "standby_mode = 'on'\n",
@@ -1824,14 +2002,14 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_11, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_11, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n"
             "standby_mode = 'on'\n",
             "check recovery options");
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_12, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_12, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n"
             "recovery_target_timeline = 'current'\n",
@@ -1845,7 +2023,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_ERROR(
-            restoreRecoveryConf(PG_VERSION_11, restoreLabel), OptionInvalidError,
+            restoreRecoveryConf(PG_VERSION_11, restoreLabel, false), OptionInvalidError,
             "option 'archive-mode' is not supported on PostgreSQL < 12\n"
             "HINT: 'archive_mode' should be manually set to 'off' in postgresql.conf.");
 
@@ -1858,11 +2036,180 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_RESULT_STR_Z(
-            restoreRecoveryConf(PG_VERSION_12, restoreLabel),
+            restoreRecoveryConf(PG_VERSION_12, restoreLabel, false),
             RECOVERY_SETTING_HEADER
             "restore_command = 'my_restore_command'\n"
             "archive_mode = 'off'\n",
             "check recovery options");
+
+        // -------------------------------------------------------------------------------------------------------------------------
+        TEST_TITLE("fork recovery sets restore_command and removes source connection and cleanup settings");
+
+        argList = strLstNew();
+        hrnCfgArgRawZ(argList, cfgOptStanza, "child");
+        hrnCfgArgRawZ(argList, cfgOptRepoPath, "/repo");
+        hrnCfgArgRawZ(argList, cfgOptPgPath, "/pg");
+        hrnCfgArgRawZ(argList, cfgOptType, "standby");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        KeyValue *forkOptions = restoreRecoveryOption(PG_VERSION_18, true);
+        TEST_RESULT_STR(
+            varStr(kvGet(forkOptions, VARSTRDEF("restore_command"))), forkArchiveCommand(cfgCmdArchiveGet),
+            "fork replica has one standard archive-get command");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF("primary_conninfo"))), "", "clear inherited primary connection");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF("primary_slot_name"))), "", "clear inherited replication slot");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF("archive_cleanup_command"))), "", "clear inherited archive cleanup");
+        TEST_RESULT_STR_Z(
+            varStr(kvGet(forkOptions, VARSTRDEF("recovery_end_command"))), "", "clear inherited end-of-recovery hook");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET))), "", "standby clears inherited immediate target");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_NAME))), "", "standby clears inherited named target");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_TIME))), "", "standby clears inherited time target");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_XID))), "", "standby clears inherited xid target");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_LSN))), "", "standby clears inherited LSN target");
+        TEST_RESULT_BOOL(
+            strstr(strZ(restoreRecoveryConf(PG_VERSION_18, restoreLabel, true)), "restore_command = '''") != NULL, true,
+            "shell quotes are doubled when rendered as a PostgreSQL string");
+
+        const unsigned int legacyVersion[] = {PG_VERSION_96, PG_VERSION_10, PG_VERSION_11};
+        for (unsigned int idx = 0; idx < LENGTH_OF(legacyVersion); idx++)
+        {
+            TEST_RESULT_STR(
+                restoreRecoveryConf(legacyVersion[idx], restoreLabel, true),
+                strNewFmt(
+                    RECOVERY_SETTING_HEADER "restore_command = %s\nstandby_mode = 'on'\n",
+                    strZ(forkPgConfigQuote(forkArchiveCommand(cfgCmdArchiveGet)))),
+                "legacy recovery.conf has no empty recovery settings");
+        }
+        TEST_RESULT_STR(
+            restoreRecoveryConf(PG_VERSION_12, restoreLabel, true), restoreRecoveryConf(PG_VERSION_18, restoreLabel, true),
+            "PostgreSQL 12+ resets inherited recovery GUCs");
+
+        hrnCfgArgRawZ(argList, cfgOptRecoveryOption, "primary_conninfo=host=explicit-replication-source");
+        hrnCfgArgRawZ(argList, cfgOptRecoveryOption, "primary_slot_name=explicit_slot");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        forkOptions = restoreRecoveryOption(PG_VERSION_18, true);
+        TEST_RESULT_STR_Z(
+            varStr(kvGet(forkOptions, VARSTRDEF("primary_conninfo"))), "host=explicit-replication-source",
+            "standby can explicitly enable streaming after archive restore");
+        forkOptions = restoreRecoveryOption(PG_VERSION_11, true);
+        TEST_RESULT_STR_Z(
+            varStr(kvGet(forkOptions, VARSTRDEF("primary_conninfo"))), "host=explicit-replication-source",
+            "legacy standby retains an explicit connection");
+        TEST_RESULT_STR_Z(
+            varStr(kvGet(forkOptions, VARSTRDEF("primary_slot_name"))), "explicit_slot",
+            "legacy standby retains an explicit replication slot");
+
+        hrnCfgArgRawZ(argList, cfgOptRecoveryOption, "recovery_target_name=requested-target");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        forkOptions = restoreRecoveryOption(PG_VERSION_18, true);
+        TEST_RESULT_STR_Z(
+            varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_NAME))), "requested-target",
+            "ordinary restore retains explicit target");
+        TEST_RESULT_BOOL(
+            kvGetIdx(forkOptions, VARSTRDEF(RECOVERY_TARGET_NAME)) > kvGetIdx(forkOptions, VARSTRDEF(RECOVERY_TARGET_LSN)), true,
+            "explicit named target is rendered after inherited selector resets");
+
+        hrnCfgArgRawZ(argList, cfgOptRecoveryOption, "restore-command=some_other_archive");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        TEST_ERROR(
+            restoreRecoveryOption(PG_VERSION_18, true), OptionInvalidError,
+            "fork restore_command is generated by pgBackRest and cannot be overridden");
+
+        argList = strLstNew();
+        hrnCfgArgRawZ(argList, cfgOptStanza, "child");
+        hrnCfgArgRawZ(argList, cfgOptRepoPath, "/repo");
+        hrnCfgArgRawZ(argList, cfgOptPgPath, "/pg");
+        hrnCfgArgRawZ(argList, cfgOptType, "lsn");
+        hrnCfgArgRawZ(argList, cfgOptTarget, "0/3000000");
+        const InfoForkData targetData =
+        {
+            .backupLabel = STRDEF("20261008-120000F"), .targetType = STRDEF("lsn"),
+            .targetValue = STRDEF("0/3000000"), .sourceTimeline = 1,
+        };
+        hrnCfgArgRawZ(argList, cfgOptRecoveryOption, "primary-conninfo=host=production");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        TEST_ERROR(
+            restoreForkTarget(&targetData), OptionInvalidError,
+            "fork initial recovery must read WAL from its archive");
+
+        strLstRemoveIdx(argList, strLstSize(argList) - 1);
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        restoreForkTarget(&targetData);
+        forkOptions = restoreRecoveryOption(PG_VERSION_18, true);
+        TEST_RESULT_STR_Z(
+            varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_INCLUSIVE))), "true", "override inherited exclusive target");
+        TEST_RESULT_STR_Z(
+            varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_LSN))), "0/3000000", "explicit LSN target wins");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET))), "", "clear inherited immediate target");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_NAME))), "", "clear inherited named target");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_TIME))), "", "clear inherited time target");
+        TEST_RESULT_STR_Z(varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_XID))), "", "clear inherited transaction target");
+        forkOptions = restoreRecoveryOption(PG_VERSION_11, true);
+        TEST_RESULT_BOOL(
+            kvKeyExists(forkOptions, VARSTRDEF(RECOVERY_TARGET_INCLUSIVE)), false, "legacy recovery uses its inclusive default");
+        TEST_RESULT_STR_Z(
+            varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_LSN))), "0/3000000",
+            "legacy recovery retains the requested target");
+
+        InfoForkData exclusiveData = targetData;
+        exclusiveData.targetExclusive = true;
+        hrnCfgArgRawBool(argList, cfgOptTargetExclusive, true);
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        forkOptions = restoreRecoveryOption(PG_VERSION_18, true);
+        TEST_RESULT_STR_Z(
+            varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_INCLUSIVE))), "false", "explicit exclusive fork target");
+        forkOptions = restoreRecoveryOption(PG_VERSION_11, true);
+        TEST_RESULT_STR_Z(
+            varStr(kvGet(forkOptions, VARSTRDEF(RECOVERY_TARGET_INCLUSIVE))), "false",
+            "legacy recovery retains an exclusive target");
+        hrnCfgArgRawZ(argList, cfgOptRecoveryOption, "recovery-target-inclusive=true");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        TEST_ERROR(
+            restoreForkTarget(&exclusiveData), OptionInvalidError,
+            "fork recovery target settings are generated from the fork options and cannot be overridden");
+
+        strLstRemoveIdx(argList, strLstSize(argList) - 1);
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        cfgOptionSet(cfgOptType, cfgSourceParam, VARUINT64(CFGOPTVAL_RESTORE_TYPE_TIME_STRID));
+        cfgOptionSet(cfgOptTarget, cfgSourceParam, VARSTRDEF("2026-10-09 12:00:00+03"));
+        forkOptions = restoreRecoveryOption(PG_VERSION_18, true);
+        TEST_RESULT_BOOL(
+            kvGetIdx(forkOptions, VARSTRDEF(RECOVERY_TARGET_TIME)) > kvGetIdx(forkOptions, VARSTRDEF(RECOVERY_TARGET_LSN)) &&
+            kvGetIdx(forkOptions, VARSTRDEF(RECOVERY_TARGET_TIME)) > kvGetIdx(forkOptions, VARSTRDEF(RECOVERY_TARGET_XID)),
+            true, "PostgreSQL requires all empty target selectors before the nonempty time target");
+
+        TEST_TITLE("initial fork restore requires the saved target and rejects standby mode");
+
+        StringList *const bootstrapArgs = strLstNew();
+        hrnCfgArgRawZ(bootstrapArgs, cfgOptStanza, "child");
+        hrnCfgArgRawZ(bootstrapArgs, cfgOptRepoPath, "/repo");
+        hrnCfgArgRawZ(bootstrapArgs, cfgOptPgPath, "/pg");
+        HRN_CFG_LOAD(cfgCmdRestore, bootstrapArgs);
+        TEST_RESULT_VOID(restoreForkTarget(&targetData), "load PITR settings without target arguments on restore");
+        TEST_RESULT_STR_Z(cfgOptionDisplay(cfgOptType), "lsn", "saved target type");
+        TEST_RESULT_STR_Z(cfgOptionStr(cfgOptTarget), "0/3000000", "saved target");
+        TEST_RESULT_STR_Z(cfgOptionStr(cfgOptSet), "20261008-120000F", "saved backup");
+        TEST_RESULT_STR_Z(cfgOptionStr(cfgOptTargetTimeline), "1", "frozen source timeline");
+        TEST_RESULT_STR_Z(cfgOptionDisplay(cfgOptTargetAction), "promote", "user's startup will complete PITR");
+
+        argList = strLstDup(bootstrapArgs);
+        hrnCfgArgRawZ(argList, cfgOptType, "standby");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        TEST_ERROR(
+            restoreForkTarget(&targetData), OptionInvalidError,
+            "fork has no archived branch; start the initial primary and archive its timeline history before restoring a standby");
+
+        argList = strLstDup(bootstrapArgs);
+        hrnCfgArgRawZ(argList, cfgOptType, "lsn");
+        hrnCfgArgRawZ(argList, cfgOptTarget, "0/4000000");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        TEST_ERROR(
+            restoreForkTarget(&targetData), OptionInvalidError,
+            "initial fork restore must use its saved backup and recovery target");
+
+        argList = strLstDup(bootstrapArgs);
+        hrnCfgArgRawZ(argList, cfgOptTargetTimeline, "2");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        TEST_ERROR(restoreForkTarget(&targetData), OptionInvalidError, "initial fork restore must use its saved source timeline");
     }
 
     // *****************************************************************************************************************************
@@ -1892,7 +2239,7 @@ testRun(void)
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
         TEST_ERROR(
-            restoreRecoveryWriteAutoConf(&fileInfo, PG_VERSION_12, restoreLabel), OptionInvalidError,
+            restoreRecoveryWriteAutoConf(&fileInfo, PG_VERSION_12, restoreLabel, false), OptionInvalidError,
             "'standby_mode' setting is not valid for PostgreSQL >= 12\n"
             "HINT: use --type=standby instead of --recovery-option=standby_mode=on.");
 
@@ -1908,7 +2255,7 @@ testRun(void)
         hrnCfgArgRawZ(argList, cfgOptType, "none");
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
-        restoreRecoveryWriteAutoConf(&fileInfo, PG_VERSION_12, restoreLabel);
+        restoreRecoveryWriteAutoConf(&fileInfo, PG_VERSION_12, restoreLabel, false);
 
         TEST_STORAGE_GET_EMPTY(storagePg(), PG_FILE_POSTGRESQLAUTOCONF, .comment = "check postgresql.auto.conf");
         TEST_STORAGE_LIST(
@@ -1928,7 +2275,7 @@ testRun(void)
             "# DO NOT MODIFY\n"
             "\t recovery_target_action='promote'\n\n");
 
-        restoreRecoveryWriteAutoConf(&fileInfo, PG_VERSION_12, restoreLabel);
+        restoreRecoveryWriteAutoConf(&fileInfo, PG_VERSION_12, restoreLabel, false);
 
         TEST_STORAGE_GET(
             storagePg(), PG_FILE_POSTGRESQLAUTOCONF,
@@ -1951,7 +2298,7 @@ testRun(void)
             "# DO NOT MODIFY\n"
             "\t recovery_target_action='promote'\n\n");
 
-        restoreRecoveryWriteAutoConf(&fileInfo, PG_VERSION_12, restoreLabel);
+        restoreRecoveryWriteAutoConf(&fileInfo, PG_VERSION_12, restoreLabel, false);
 
         TEST_STORAGE_GET(
             storagePg(), PG_FILE_POSTGRESQLAUTOCONF,
@@ -1986,7 +2333,7 @@ testRun(void)
         hrnCfgArgRawZ(argList, cfgOptRecoveryOption, "restore-command=my_restore_command");
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
-        restoreRecoveryWriteAutoConf(&fileInfo, PG_VERSION_12, restoreLabel);
+        restoreRecoveryWriteAutoConf(&fileInfo, PG_VERSION_12, restoreLabel, false);
 
         TEST_STORAGE_GET(
             storagePg(), PG_FILE_POSTGRESQLAUTOCONF,
@@ -2020,7 +2367,7 @@ testRun(void)
         hrnCfgArgRawZ(argList, cfgOptType, "preserve");
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
-        restoreRecoveryWrite(manifest, &fileInfo);
+        restoreRecoveryWrite(manifest, &fileInfo, false);
 
         TEST_STORAGE_GET(
             storagePg(), PG_FILE_POSTGRESQLAUTOCONF, "# DO NOT MODIFY\n", .comment = "check postgresql.auto.conf");
@@ -2043,7 +2390,7 @@ testRun(void)
         hrnCfgArgRaw(argList, cfgOptPgPath, pgPath);
         HRN_CFG_LOAD(cfgCmdRestore, argList);
 
-        restoreRecoveryWrite(manifest, &fileInfo);
+        restoreRecoveryWrite(manifest, &fileInfo, false);
 
         TEST_RESULT_BOOL(
             bufEq(storageGetP(storageNewReadP(storagePg(), PG_FILE_POSTGRESQLAUTOCONF_STR)), BUFSTRDEF("# DO NOT MODIFY\n")),
@@ -2055,6 +2402,49 @@ testRun(void)
             .comment = "recovery.signal exists, standby.signal missing");
 
         TEST_RESULT_LOG("P00   INFO: write updated " TEST_PATH "/pg/postgresql.auto.conf");
+
+        // -------------------------------------------------------------------------------------------------------------------------
+        TEST_TITLE("fork standby uses its own archive settings after promotion");
+        argList = strLstNew();
+        hrnCfgArgRawZ(argList, cfgOptStanza, "child");
+        hrnCfgArgRawZ(argList, cfgOptRepoPath, "/repo");
+        hrnCfgArgRaw(argList, cfgOptPgPath, pgPath);
+        hrnCfgArgRawZ(argList, cfgOptType, "standby");
+        hrnCfgArgRawZ(argList, cfgOptArchiveMode, "off");
+        HRN_CFG_LOAD(cfgCmdRestore, argList);
+        HRN_STORAGE_PUT_Z(storagePgWrite(), "postgresql.conf", "data_directory = '/production'\n");
+        HRN_STORAGE_PUT_Z(
+            storagePgWrite(), PG_FILE_POSTGRESQLAUTOCONF,
+            "primary_conninfo = 'host=production'\narchive_command = 'production-archive'\n"
+            "archive_library = 'production_library'\n");
+        Manifest *const forkManifest = testManifestMinimal(STRDEF("20161219-212741F"), PG_VERSION_18, pgPath);
+        restoreRecoveryWrite(forkManifest, &fileInfo, true);
+        TEST_RESULT_LOG("P00   INFO: write updated " TEST_PATH "/pg/postgresql.auto.conf");
+        const String *const forkMain = strNewBuf(storageGetP(storageNewReadP(storagePg(), STRDEF("postgresql.conf"))));
+        TEST_RESULT_BOOL(
+            strEndsWithZ(forkMain, "data_directory = '" TEST_PATH "/pg'\n"), true,
+            "main configuration overrides source PGDATA before PostgreSQL reads auto configuration");
+        const String *const forkAuto = strNewBuf(storageGetP(storageNewReadP(storagePg(), PG_FILE_POSTGRESQLAUTOCONF_STR)));
+        TEST_RESULT_BOOL(strstr(strZ(forkAuto), "primary_conninfo = ''\n") != NULL, true, "inherited connection is overridden");
+        TEST_RESULT_BOOL(strstr(strZ(forkAuto), "archive_library = ''\n") != NULL, true, "source archive library is disabled");
+        TEST_RESULT_BOOL(
+            strstr(strZ(forkAuto), "external_pid_file = ''\n") != NULL, true, "no external source PID file is written");
+        TEST_RESULT_BOOL(strstr(strZ(forkAuto), "log_directory = '" TEST_PATH "/pg/log'\n") != NULL, true, "logs remain local");
+        TEST_RESULT_BOOL(
+            strstr(strZ(forkAuto), "archive_mode = 'off'\n") != NULL, true, "replica archive-mode choice is preserved");
+        TEST_RESULT_BOOL(
+            strstr(strZ(forkAuto), "archive_mode = 'on'\n") != NULL, false, "restore does not enable replica archiving");
+        TEST_RESULT_BOOL(
+            strstr(
+                strZ(forkAuto),
+                strZ(strNewFmt("archive_command = %s\n", strZ(forkPgConfigQuote(forkArchiveCommand(cfgCmdArchivePush)))))) != NULL,
+            true, "promotion writes only to the child archive");
+
+        restoreForkConfig(PG_VERSION_11, &fileInfo);
+        TEST_RESULT_BOOL(
+            strstr(strZ(strNewBuf(storageGetP(storageNewReadP(storagePg(), PG_FILE_POSTGRESQLAUTOCONF_STR)))),
+                   "stats_temp_directory = '" TEST_PATH "/pg/pg_stat_tmp'\n") != NULL, true,
+            "older PostgreSQL statistics files also remain local");
     }
 
     // *****************************************************************************************************************************

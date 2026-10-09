@@ -302,6 +302,13 @@ testRun(void)
         TEST_RESULT_VOID(infoSave(info, ioBufferWriteNew(contentSave), testInfoSaveCallback, strNewZ("1")), "info save");
         TEST_RESULT_STR(strNewBuf(contentSave), strNewBuf(contentLoad), "   check save");
 
+        TEST_ASSIGN(
+            info, infoNewLoad(ioBufferReadNew(contentSave), cipherSpecNewNone(), harnessInfoLoadNewCallback, strNew()),
+            "load format 5 plaintext metadata with an encrypted dependent file");
+        TEST_RESULT_UINT(cipherSpecType(testInfoCipherSpec(info)), cipherTypeAes256Cbc, "    keep payload cipher type");
+        TEST_RESULT_UINT(cipherSpecDigest(testInfoCipherSpec(info)), hashTypeSha1, "    keep payload key digest");
+        TEST_RESULT_STR_Z(strNewBuf(cipherSpecPass(testInfoCipherSpec(info))), "somepass", "    keep payload key");
+
         // Migrating to a format that stores the digest does not change the digest the pass derives with, since the files the pass
         // encrypted before the migration are not rewritten
         contentSave = bufNew(0);
@@ -409,6 +416,18 @@ testRun(void)
             strNewBuf(cipherSpecPass(cipherSpecMapGet(cipherSpecMapLoad, STRDEF("9")))), "newpass", "    check key 9");
         TEST_RESULT_UINT(
             cipherSpecDigest(cipherSpecMapGet(cipherSpecMapLoad, STRDEF("9"))), hashTypeSha256, "    check key 9 digest");
+
+        TEST_ASSIGN(
+            info, infoNewLoad(ioBufferReadNew(contentSave), cipherSpecNewNone(), harnessInfoLoadNewCallback, strNew()),
+            "load format 6 plaintext metadata with encrypted dependent files");
+        TEST_RESULT_UINT(cipherSpecType(testInfoCipherSpec(info)), cipherTypeAes256Cbc, "    keep default cipher type");
+        TEST_RESULT_UINT(
+            cipherSpecType(cipherSpecMapGet(infoCipherSpecMap(info), STRDEF("9"))), cipherTypeAes256Cbc,
+            "    keep current cipher type");
+        Buffer *const contentPlain = bufNew(0);
+        TEST_RESULT_VOID(
+            infoSave(info, ioBufferWriteNew(contentPlain), testInfoSaveCallback, strNewZ("1")), "save plaintext metadata");
+        TEST_RESULT_STR(strNewBuf(contentPlain), strNewBuf(contentSave), "    keep key ids, digests and rotation metadata");
 
         // The content on its own, which is how a caller that wants the file rather than the values in it reads an info file
         IoRead *const infoRead = ioBufferReadNew(harnessInfoEncryptP(contentLoad, cipherSpec, .format = REPOSITORY_FORMAT_6));

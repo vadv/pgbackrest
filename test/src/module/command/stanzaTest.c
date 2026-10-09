@@ -1073,10 +1073,50 @@ testRun(void)
         hrnCfgArgRawZ(argList, cfgOptRepoFormat, "6");
         HRN_CFG_LOAD(cfgCmdStanzaUpgrade, argList);
 
+        InfoForkData forkData =
+        {
+            .sourceId = STRDEF("source-id"),
+            .sourceRepoKey = 1,
+            .sourceStanza = STRDEF("source"),
+            .sourceArchiveId = STRDEF("15-2"),
+            .backupLabel = STRDEF("20261008-120000F"),
+            .importedBackupList = strLstNewSplitZ(STRDEF("20261008-120000F"), ","),
+            .pgVersion = PG_VERSION_14,
+            .state = infoForkStatePublished,
+            .systemId = HRN_PG_SYSTEMID_15,
+            .walSegmentSize = 16 * 1024 * 1024,
+            .sourceTimeline = 1,
+            .sourceHistory = EMPTY_STR,
+            .targetType = STRDEF("lsn"),
+            .targetValue = STRDEF("0/3000000"),
+            .history = EMPTY_STR,
+        };
+        infoForkSaveFile(
+            infoForkNew(REPOSITORY_FORMAT_DEFAULT, &forkData), storageRepoIdxWrite(0), STRDEF(INFO_FORK_PATH_FILE),
+            cipherSpecNewNone());
+        TEST_ERROR(
+            cmdStanzaUpgrade(), FeatureNotSupportedError, "cannot upgrade the PostgreSQL identity of an inherited stanza");
+        TEST_RESULT_LOG("P00   INFO: stanza-upgrade for stanza 'db' on repo1");
+        forkData.pgVersion = PG_VERSION_15;
+        forkData.systemId++;
+        infoForkSaveFile(
+            infoForkNew(REPOSITORY_FORMAT_DEFAULT, &forkData), storageRepoIdxWrite(0), STRDEF(INFO_FORK_PATH_FILE),
+            cipherSpecNewNone());
+        TEST_ERROR(
+            cmdStanzaUpgrade(), FeatureNotSupportedError, "cannot upgrade the PostgreSQL identity of an inherited stanza");
+        TEST_RESULT_LOG("P00   INFO: stanza-upgrade for stanza 'db' on repo1");
+        forkData.systemId--;
+        infoForkSaveFile(
+            infoForkNew(REPOSITORY_FORMAT_DEFAULT, &forkData), storageRepoIdxWrite(0), STRDEF(INFO_FORK_PATH_FILE),
+            cipherSpecNewNone());
+
         TEST_RESULT_VOID(cmdStanzaUpgrade(), "stanza upgrade - format 6");
         TEST_RESULT_LOG(
             "P00   INFO: stanza-upgrade for stanza 'db' on repo1\n"
             "P00   INFO: upgrade repository format from 5 to 6");
+
+        storageRemoveP(storageRepoIdxWrite(0), STRDEF(INFO_FORK_PATH_FILE));
+        storageRemoveP(storageRepoIdxWrite(0), STRDEF(INFO_FORK_PATH_FILE INFO_COPY_EXT));
 
         TEST_RESULT_UINT(
             infoArchiveFormat(infoArchiveLoadFile(storageRepoIdx(0), INFO_ARCHIVE_PATH_FILE_STR, cipherSpecNewNone())),
@@ -1454,6 +1494,106 @@ testRun(void)
             "backup/otherstanza/backup.info\n"
             "backup/otherstanza/backup.info.copy\n",
             .comment = "otherstanza exists");
+    }
+
+    // *****************************************************************************************************************************
+    if (testBegin("fork pins protect the source until fork deletion completes"))
+    {
+        StringList *const args = strLstNew();
+        hrnCfgArgRawZ(args, cfgOptStanza, "child");
+        hrnCfgArgRawZ(args, cfgOptRepoPath, TEST_PATH "/repo");
+        hrnCfgArgRawZ(args, cfgOptPgPath, TEST_PATH "/pg");
+        HRN_CFG_LOAD(cfgCmdStanzaDelete, args);
+
+        const InfoForkData data =
+        {
+            .sourceId = forkSourceId(0, STRDEF("source"), STRDEF("16-1"), HRN_PG_SYSTEMID_16),
+            .sourceRepoKey = 1,
+            .sourceStanza = STRDEF("source"),
+            .sourceArchiveId = STRDEF("16-1"),
+            .backupLabel = STRDEF("20261008-120000F"),
+            .importedBackupList = strLstNewSplitZ(STRDEF("20261008-120000F"), ","),
+            .pgVersion = PG_VERSION_16,
+            .systemId = HRN_PG_SYSTEMID_16,
+            .walSegmentSize = 16 * 1024 * 1024,
+            .sourceTimeline = 1,
+            .sourceHistory = EMPTY_STR,
+            .targetType = STRDEF("lsn"),
+            .targetValue = STRDEF("0/3000000"),
+            .history = EMPTY_STR,
+        };
+        InfoFork *const fork = infoForkNew(REPOSITORY_FORMAT_DEFAULT, &data);
+        const String *const pin = strNewFmt("backup/source/fork-pin/%s", strZ(forkPinName(0, STRDEF("child"))));
+        const String *const pinCopy = strNewFmt("%s" INFO_COPY_EXT, strZ(pin));
+        infoForkSaveFile(fork, storageRepoWrite(), STRDEF(INFO_FORK_PATH_FILE), cfgCipherSpecMainIdx(0));
+        infoForkSaveFile(fork, storageRepoWrite(), pin, cfgCipherSpecMainIdx(0));
+        infoBackupSaveFile(
+            infoBackupNew(PG_VERSION_16, HRN_PG_SYSTEMID_16, hrnPgCatalogVersion(PG_VERSION_16), REPOSITORY_FORMAT_DEFAULT, NULL),
+            storageRepoWrite(), STRDEF("backup/source/backup.info"), cfgCipherSpecMainIdx(0));
+        HRN_STORAGE_PUT_Z(storageRepoWrite(), "backup/source/20261008-120000F/bundle/1", "inherited data");
+        HRN_STORAGE_PUT_Z(storageRepoWrite(), STORAGE_REPO_ARCHIVE "/16-1/00000002.history", "child history");
+
+        TEST_ERROR(
+            cmdStanzaDelete(), FileMissingError,
+            "stop file does not exist for stanza 'child'\n"
+            "HINT: has the pgbackrest stop command been run on this server for this stanza?");
+        TEST_RESULT_BOOL(storageExistsP(storageRepo(), pin), true, "failed deletion keeps the source pin");
+        TEST_RESULT_BOOL(storageExistsP(storageRepo(), pinCopy), true, "failed deletion keeps the pin recovery copy");
+        lockReleaseP();
+
+        HRN_STORAGE_PUT_EMPTY(storageHrn, strZ(lockStopFileName(cfgOptionStr(cfgOptStanza))));
+        HRN_STORAGE_PUT_Z(storageRepoWrite(), STORAGE_REPO_BACKUP "/20261008-120000F/backup.manifest", "child reference");
+        HRN_STORAGE_PUT_Z(storageRepoWrite(), STORAGE_REPO_BACKUP "/20261008-120000F/bundle/1", "child payload");
+
+        // A directory makes pin removal fail for all users, including root.
+        // The recovery copy protects the source during fork deletion.
+        storageRemoveP(storageRepoWrite(), pin);
+        storagePathCreateP(storageRepoWrite(), pin);
+        TEST_ERROR_MULTI(
+            cmdStanzaDelete(), FileRemoveError,
+            strZ(strNewFmt("unable to remove file '%s': [21] Is a directory", strZ(storagePathP(storageRepo(), pin)))),
+            strZ(strNewFmt("unable to remove file '%s': [1] Operation not permitted", strZ(storagePathP(storageRepo(), pin)))));
+        TEST_RESULT_BOOL(storageExistsP(storageRepo(), STRDEF(INFO_FORK_PATH_FILE)), true, "failed pin removal keeps descriptor");
+        TEST_RESULT_BOOL(
+            storageExistsP(storageRepo(), STRDEF(INFO_FORK_PATH_FILE INFO_COPY_EXT)), true,
+            "failed pin removal keeps descriptor recovery copy");
+        TEST_RESULT_BOOL(storagePathExistsP(storageRepo(), STORAGE_REPO_ARCHIVE_STR), false, "child archive removed before pin");
+        TEST_RESULT_BOOL(
+            storagePathExistsP(storageRepo(), STRDEF(STORAGE_REPO_BACKUP "/20261008-120000F")), false,
+            "child payload and references removed before pin");
+        TEST_RESULT_BOOL(storageExistsP(storageRepo(), pinCopy), true, "parent remains pinned after partial deletion");
+        lockReleaseP();
+
+        storagePathRemoveP(storageRepoWrite(), pin, .recurse = true);
+        infoForkSaveFile(fork, storageRepoWrite(), pin, cfgCipherSpecMainIdx(0));
+        TEST_RESULT_VOID(cmdStanzaDelete(), "delete a stopped child and release its dependency");
+        TEST_RESULT_BOOL(storageExistsP(storageRepo(), pin), false, "successful deletion releases the source pin");
+        TEST_RESULT_BOOL(storageExistsP(storageRepo(), pinCopy), false, "successful deletion releases its recovery copy");
+        TEST_RESULT_BOOL(storagePathExistsP(storageRepo(), STORAGE_REPO_BACKUP_STR), false, "child backup metadata removed");
+        TEST_RESULT_BOOL(storagePathExistsP(storageRepo(), STORAGE_REPO_ARCHIVE_STR), false, "child archive removed");
+        TEST_STORAGE_GET(storageRepo(), "backup/source/20261008-120000F/bundle/1", "inherited data");
+        lockReleaseP();
+
+        // Simulate a crash after removal of the pin and main metadata file. Source deletion can now proceed.
+        infoForkSaveFile(fork, storageRepoWrite(), STRDEF(INFO_FORK_PATH_FILE), cfgCipherSpecMainIdx(0));
+        storageRemoveP(storageRepoWrite(), STRDEF(INFO_FORK_PATH_FILE));
+        storagePathRemoveP(storageRepoWrite(), STRDEF("backup/source"), .recurse = true);
+        HRN_STORAGE_PUT_EMPTY(storageHrn, strZ(lockStopFileName(cfgOptionStr(cfgOptStanza))));
+        TEST_RESULT_VOID(cmdStanzaDelete(), "finish descriptor cleanup after the unpinned source has disappeared");
+        TEST_RESULT_BOOL(storagePathExistsP(storageRepo(), STORAGE_REPO_BACKUP_STR), false, "last descriptor copy removed");
+        TEST_RESULT_BOOL(storagePathExistsP(storageRepo(), STRDEF("backup/source")), false, "deleted source is not recreated");
+        lockReleaseP();
+
+        HRN_STORAGE_PUT_Z(storageRepoWrite(), "backup/source/20261008-120000F/bundle/1", "inherited data");
+        StringList *const sourceArgs = strLstNew();
+        hrnCfgArgRawZ(sourceArgs, cfgOptStanza, "source");
+        hrnCfgArgRawZ(sourceArgs, cfgOptRepoPath, TEST_PATH "/repo");
+        hrnCfgArgRawZ(sourceArgs, cfgOptPgPath, TEST_PATH "/source-pg");
+        hrnCfgArgRawBool(sourceArgs, cfgOptForce, true);
+        HRN_CFG_LOAD(cfgCmdStanzaDelete, sourceArgs);
+        HRN_STORAGE_PUT_EMPTY(storageRepoWrite(), STORAGE_REPO_BACKUP "/fork-pin/remaining.info.copy");
+        TEST_ERROR(cmdStanzaDelete(), FileInvalidError, "cannot delete a stanza with dependent forks");
+        TEST_STORAGE_GET(storageRepo(), "backup/source/20261008-120000F/bundle/1", "inherited data");
     }
 
     FUNCTION_HARNESS_RETURN_VOID();

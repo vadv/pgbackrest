@@ -2418,6 +2418,55 @@
                 </option-list>
             </command>
 
+            <command id="fork" name="Fork Stanza">
+                <summary>Create a PITR fork for primary and standby recovery.</summary>
+                <text>
+                    <p>Create a fork stanza with <br-option>--stanza</br-option> from <br-option>--source-stanza</br-option>. The fork uses the source backup and shared WAL. The new primary adds its timeline history and new WAL to the fork archive. These files let you restore the primary or create a standby. You do not need a new full backup.</p>
+                    <p>Run <cmd>restore</cmd> for the new primary. The first restore uses the saved PITR target. Start PostgreSQL. When <cmd>archive-push</cmd> receives the first new <id>.history</id> file, it records the branch point.</p>
+                    <p>After the required history and WAL reach the archive, use <cmd>restore</cmd> to recover the primary. To create a standby, use <cmd>restore</cmd> with <br-option>--type=standby</br-option> and the same stanza. Recovery requires all WAL through the recovery point.</p>
+                    <p><cmd>archive-get</cmd> reads the fork archive first. For shared WAL, it can read the source archive. After the branch point, it reads WAL from the fork archive. Keep the source backups, shared WAL, and repository access available.</p>
+                </text>
+                <option-list>
+                    <option id="source-stanza" name="Source Stanza">
+                        <summary>Stanza with the source backup and WAL.</summary>
+                        <text><p>The fork uses the backup and WAL from this stanza.</p></text>
+                        <example>production</example>
+                    </option>
+                    <option id="source-repo" name="Source Repository">
+                        <summary>Repository with the source stanza.</summary>
+                        <text><p>Select the source repository by its configuration index. Use <br-option>--repo</br-option> to select the fork repository.</p></text>
+                        <example>2</example>
+                    </option>
+                    <option id="set" name="Set">
+                        <summary>Source backup to use.</summary>
+                        <text><p>Specify the label of a source backup. Use <id>latest</id> to let <cmd>fork</cmd> select a backup for the recovery target.</p></text>
+                        <example>20261008-120000F</example>
+                    </option>
+                    <option id="type" name="Type">
+                        <summary>Recovery target type.</summary>
+                        <text>
+                            <p>For <cmd>fork</cmd>, use <id>time</id> or <id>lsn</id>. The <cmd>restore</cmd> command also supports <allow-list/>.</p>
+                        </text>
+                        <example>time</example>
+                    </option>
+                    <option id="target" name="Target">
+                        <summary>PITR target time or LSN.</summary>
+                        <text><p>Use the recovery target that matches <br-option>--type</br-option>. For a time target, include a numeric time zone.</p></text>
+                        <example>2026-10-08 13:30:00+03</example>
+                    </option>
+                    <option id="target-exclusive" name="Target Exclusive">
+                        <summary>Stop before the specified recovery target.</summary>
+                        <text><p>Exclude the target from recovery. The default includes the target.</p></text>
+                        <example>y</example>
+                    </option>
+                    <option id="target-timeline" name="Target Timeline">
+                        <summary>Source recovery timeline.</summary>
+                        <text><p>By default, <cmd>fork</cmd> selects the source timeline from the source archive. The fork saves this timeline for the first restore.</p></text>
+                        <example>latest</example>
+                    </option>
+                </option-list>
+            </command>
+
             <command id="manifest" name="Query Manifest">
                 <summary>Query manifest.</summary>
 

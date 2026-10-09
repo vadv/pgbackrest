@@ -7,6 +7,7 @@ Archive Push Command
 #include <unistd.h>
 
 #include "command/archive/common.h"
+#include "command/archive/fork.h"
 #include "command/archive/push/file.h"
 #include "command/archive/push/protocol.h"
 #include "command/archive/push/push.h"
@@ -223,8 +224,17 @@ archivePushCheck(const bool pgPathSet)
             result.pgSystemId = pgControl.systemId;
         }
 
+        const ArchiveFork *const fork = archiveForkLoad();
+
         for (unsigned int repoIdx = 0; repoIdx < cfgOptionGroupIdxTotal(cfgOptGrpRepo); repoIdx++)
         {
+            if (cfgOptionTest(cfgOptRepo) && cfgOptionUInt(cfgOptRepo) != cfgOptionGroupIdxToKey(cfgOptGrpRepo, repoIdx))
+                continue;
+
+            // Archive WAL in the fork repository.
+            if (fork != NULL && repoIdx != fork->repoIdx)
+                continue;
+
             TRY_BEGIN()
             {
                 // Get the repo storage in case it is remote and encryption settings need to be pulled down
@@ -240,7 +250,7 @@ archivePushCheck(const bool pgPathSet)
 
                 // Ensure that stanza version and system identifier match pg_control when available or the other repos when
                 // pg_control is not available
-                if (pgPathSet || repoIdx > 0)
+                if (pgPathSet || !lstEmpty(result.repoList))
                 {
                     if (result.pgVersion != archiveInfo.version || result.pgSystemId != archiveInfo.systemId)
                     {
@@ -328,7 +338,13 @@ cmdArchivePush(void)
         const String *const walFile = walPath(strLstGet(commandParam, 0), cfgOptionStrNull(cfgOptPgPath), STR(cfgCommandName()));
         const String *const archiveFile = strBase(walFile);
 
-        if (cfgOptionBool(cfgOptArchiveAsync))
+        // Synchronous pushes save timeline metadata before publishing history files.
+        const ArchiveFork *const fork = archiveForkLoad();
+
+        if (fork != NULL && cfgOptionBool(cfgOptArchiveAsync))
+            LOG_DETAIL("fork archive-push uses synchronous archive writes");
+
+        if (fork == NULL && cfgOptionBool(cfgOptArchiveAsync))
         {
             bool pushed = false;                                        // Has the WAL segment been pushed yet?
             bool forked = false;                                        // Has the async process been forked yet?
@@ -406,31 +422,45 @@ cmdArchivePush(void)
         }
         else
         {
-            // Check if the push queue has been exceeded
-            if (cfgOptionTest(cfgOptArchivePushQueueMax) &&
-                archivePushDrop(strPath(walFile), archivePushReadyList(strPath(walFile))))
+            // Lock and reload the timeline history so concurrent writers preserve promotion order.
+            if (fork != NULL)
+                lockAcquireP(archiveForkLockName(fork->repoIdx));
+
+            TRY_BEGIN()
             {
-                LOG_WARN(strZ(archivePushDropWarning(archiveFile, cfgOptionUInt64(cfgOptArchivePushQueueMax))));
+                // Check if the push queue has been exceeded
+                if (cfgOptionTest(cfgOptArchivePushQueueMax) &&
+                    archivePushDrop(strPath(walFile), archivePushReadyList(strPath(walFile))))
+                {
+                    LOG_WARN(strZ(archivePushDropWarning(archiveFile, cfgOptionUInt64(cfgOptArchivePushQueueMax))));
+                }
+                // Else push the file
+                else
+                {
+                    // Check archive info for each repo
+                    const ArchivePushCheckResult archiveInfo = archivePushCheck(cfgOptionTest(cfgOptPgPath));
+
+                    // Push the file to the archive
+                    const ArchivePushFileResult fileResult = archivePushFile(
+                        walFile, cfgOptionBool(cfgOptArchiveHeaderCheck), cfgOptionBool(cfgOptArchiveModeCheck),
+                        archiveInfo.pgVersion, archiveInfo.pgSystemId, archiveFile,
+                        compressTypeEnum(cfgOptionStrId(cfgOptCompressType)), cfgOptionInt(cfgOptCompressLevel),
+                        archiveInfo.repoList, archiveInfo.errorList);
+
+                    // If a warning was returned then log it
+                    for (unsigned int warnIdx = 0; warnIdx < strLstSize(fileResult.warnList); warnIdx++)
+                        LOG_WARN(strZ(strLstGet(fileResult.warnList, warnIdx)));
+
+                    // Log success
+                    LOG_INFO_FMT("pushed WAL file '%s' to the archive", strZ(archiveFile));
+                }
             }
-            // Else push the file
-            else
+            FINALLY()
             {
-                // Check archive info for each repo
-                const ArchivePushCheckResult archiveInfo = archivePushCheck(cfgOptionTest(cfgOptPgPath));
-
-                // Push the file to the archive
-                const ArchivePushFileResult fileResult = archivePushFile(
-                    walFile, cfgOptionBool(cfgOptArchiveHeaderCheck), cfgOptionBool(cfgOptArchiveModeCheck), archiveInfo.pgVersion,
-                    archiveInfo.pgSystemId, archiveFile, compressTypeEnum(cfgOptionStrId(cfgOptCompressType)),
-                    cfgOptionInt(cfgOptCompressLevel), archiveInfo.repoList, archiveInfo.errorList);
-
-                // If a warning was returned then log it
-                for (unsigned int warnIdx = 0; warnIdx < strLstSize(fileResult.warnList); warnIdx++)
-                    LOG_WARN(strZ(strLstGet(fileResult.warnList, warnIdx)));
-
-                // Log success
-                LOG_INFO_FMT("pushed WAL file '%s' to the archive", strZ(archiveFile));
+                if (fork != NULL)
+                    lockReleaseP();
             }
+            TRY_END();
         }
     }
     MEM_CONTEXT_TEMP_END();
