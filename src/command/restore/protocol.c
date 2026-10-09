@@ -8,6 +8,7 @@ Restore Protocol Handler
 
 #include "command/backup/blockMap.h"
 #include "command/backup/common.h"
+#include "command/fork/common.h"
 #include "command/restore/blockChecksum.h"
 #include "command/restore/blockDelta.h"
 #include "command/restore/protocol.h"

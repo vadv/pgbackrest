@@ -5,6 +5,7 @@ Restore Command
 
 #include <unistd.h>
 
+#include "command/fork/common.h"
 #include "command/lock.h"
 #include "command/restore/protocol.h"
 #include "command/restore/restore.h"
@@ -22,12 +23,191 @@ Restore Command
 #include "protocol/parallel.h"
 #include "storage/helper.h"
 
+#define RESTORE_FORK_FILE                                           BACKUP_MANIFEST_FILE ".fork"
+
 #include "clean.c.inc"
 #include "config.c.inc"
 #include "process.c.inc"
 #include "remap.c.inc"
 #include "select.c.inc"
 #include "validate.c.inc"
+
+/***********************************************************************************************************************************
+Omit archive-copy WAL and timeline history. Let archive-get select files from the fork's timeline history.
+***********************************************************************************************************************************/
+static void
+restoreForkManifestClean(Manifest *const manifest)
+{
+    RegExp *const expression = regExpNew(
+        STRDEF("^pg_data/(pg_wal|pg_xlog)/([0-F]{24}(\\.partial){0,1}|[0-F]{8}\\.history)$"));
+
+    for (unsigned int idx = manifestFileTotal(manifest); idx > 0; idx--)
+    {
+        const String *const name = manifestFileNameGet(manifest, idx - 1);
+
+        if (regExpMatch(expression, name))
+            manifestFileRemove(manifest, name);
+    }
+
+    regExpFree(expression);
+}
+
+/***********************************************************************************************************************************
+Resolve symbolic links before ".." components to detect source path overlap, for example, "alias/../target".
+Keep missing components to validate new destinations.
+***********************************************************************************************************************************/
+static String *
+restoreForkPath(const String *const path)
+{
+    ASSERT(strBeginsWith(path, FSLASH_STR));
+    StringList *parts = strLstNewSplit(path, FSLASH_STR);
+    StringList *resolved = strLstNew();
+    unsigned int linkTotal = 0;
+
+    for (unsigned int idx = 0; idx < strLstSize(parts); idx++)
+    {
+        const String *const part = strLstGet(parts, idx);
+
+        if (strEmpty(part) || strEq(part, DOT_STR))
+            continue;
+
+        if (strEq(part, DOTDOT_STR))
+        {
+            if (!strLstEmpty(resolved))
+                strLstRemoveIdx(resolved, strLstSize(resolved) - 1);
+
+            continue;
+        }
+
+        strLstAdd(resolved, part);
+        const String *const current = strNewFmt("/%s", strZ(strLstJoin(resolved, "/")));
+        const StorageInfo info = storageInfoP(storageLocal(), current, .ignoreMissing = true);
+
+        if (info.exists && info.type == storageTypeLink)
+        {
+            CHECK_FMT(LinkMapError, ++linkTotal <= 40, "too many symbolic links in fork restore path '%s'", strZ(path));
+            String *const remaining = strNew();
+
+            if (strBeginsWith(info.linkDestination, FSLASH_STR))
+                strCat(remaining, info.linkDestination);
+            else
+                strCatFmt(remaining, "%s/%s", strZ(strPath(current)), strZ(info.linkDestination));
+
+            for (unsigned int rest = idx + 1; rest < strLstSize(parts); rest++)
+                strCatFmt(remaining, "/%s", strZ(strLstGet(parts, rest)));
+
+            parts = strLstNewSplit(remaining, FSLASH_STR);
+            resolved = strLstNew();
+            idx = 0;
+        }
+    }
+
+    return strNewFmt("/%s", strZ(strLstJoin(resolved, "/")));
+}
+
+static String *
+restoreForkTargetPath(const Manifest *const manifest, const ManifestTarget *const target)
+{
+    const String *const path =
+        strBeginsWith(target->path, FSLASH_STR) ? target->path :
+            strNewFmt(
+                "%s/%s/%s", strZ(manifestTargetBase(manifest)->path),
+                strZ(strPath(manifestPathPg(target->name))), strZ(target->path));
+    return restoreForkPath(target->file == NULL ? path : strNewFmt("%s/%s", strZ(path), strZ(target->file)));
+}
+
+// Identify this fork's interrupted restore when another host uses the source PGDATA path.
+static String *
+restoreForkIdentity(const Manifest *const manifest, const InfoFork *const fork, const unsigned int repoIdx)
+{
+    return strNewFmt(
+        "%s\n%s\n%s\n%s\n", strZ(infoForkData(fork)->sourceId),
+        strZ(forkPinName(repoIdx, cfgOptionStr(cfgOptStanza))),
+        strZ(manifestData(manifest)->backupLabel), strZ(restoreForkPath(cfgOptionStr(cfgOptPgPath))));
+}
+
+/***********************************************************************************************************************************
+Keep source paths for validation. Map tablespaces by OID unless the user supplies a tablespace map.
+***********************************************************************************************************************************/
+static StringList *
+restoreForkMap(Manifest *const manifest, const InfoFork *const fork, const unsigned int repoIdx)
+{
+    StringList *const sourcePaths = strLstNew();
+    const KeyValue *const explicitMap = cfgOptionKvNull(cfgOptTablespaceMap);
+    const bool imported = strLstExists(infoForkData(fork)->importedBackupList, manifestData(manifest)->backupLabel);
+    const String *const destinationPgPath = restoreForkPath(cfgOptionStr(cfgOptPgPath));
+    const bool inPlace = !imported &&
+                         strEq(destinationPgPath, restoreForkTargetPath(manifest, manifestTargetBase(manifest)));
+    Manifest *const source =
+        imported ? manifest :
+            forkSourceManifestLoad(forkSourceRepoIdx(fork), infoForkData(fork)->sourceStanza, infoForkData(fork)->backupLabel);
+    const String *const sourcePgPath = restoreForkTargetPath(source, manifestTargetBase(source));
+
+    const Buffer *const restoreIdentity = storageGetP(
+        storageNewReadP(storagePg(), STRDEF(RESTORE_FORK_FILE), .ignoreMissing = true));
+
+    // At the source PGDATA path, allow an empty directory, an in-place fork restore, or a matching restore identity.
+    const bool sourceDataOwned =
+        strEq(destinationPgPath, sourcePgPath) &&
+        (inPlace || strLstEmpty(storageListP(storageLocal(), cfgOptionStr(cfgOptPgPath))) ||
+         (restoreIdentity != NULL && bufEq(restoreIdentity, BUFSTR(restoreForkIdentity(manifest, fork, repoIdx)))));
+
+    for (unsigned int idx = 0; idx < manifestTargetTotal(source); idx++)
+    {
+        const String *const path = restoreForkTargetPath(source, manifestTarget(source, idx));
+
+        if (!sourceDataOwned || (!strEq(path, sourcePgPath) && !strBeginsWith(path, strNewFmt("%s/", strZ(sourcePgPath)))))
+            strLstAdd(sourcePaths, path);
+    }
+
+    if (source != manifest)
+        manifestFree(source);
+
+    for (unsigned int idx = 0; idx < manifestTargetTotal(manifest); idx++)
+    {
+        const ManifestTarget *const target = manifestTarget(manifest, idx);
+
+        if (!imported && !inPlace)
+            strLstAddIfMissing(sourcePaths, restoreForkTargetPath(manifest, target));
+
+        if (!inPlace && target->tablespaceId != 0 && !cfgOptionTest(cfgOptTablespaceMapAll))
+        {
+            const String *const id = strNewFmt("%u", target->tablespaceId);
+
+            if (explicitMap == NULL ||
+                (kvGet(explicitMap, VARSTR(id)) == NULL && kvGet(explicitMap, VARSTR(target->tablespaceName)) == NULL))
+            {
+                const String *const path = strNewFmt("%s.tablespaces/%s", strZ(cfgOptionStr(cfgOptPgPath)), strZ(id));
+                LOG_INFO_FMT("map tablespace '%s' to '%s'", strZ(target->name), strZ(path));
+                manifestTargetUpdate(manifest, target->name, path, NULL);
+                manifestLinkUpdate(manifest, strNewFmt(MANIFEST_TARGET_PGDATA "/%s", strZ(target->name)), path);
+            }
+        }
+    }
+
+    return sourcePaths;
+}
+
+static void
+restoreForkMapValidate(const Manifest *const manifest, const StringList *const sourcePaths)
+{
+    for (unsigned int idx = 0; idx < manifestTargetTotal(manifest); idx++)
+    {
+        const String *const destination = restoreForkTargetPath(manifest, manifestTarget(manifest, idx));
+
+        for (unsigned int sourceIdx = 0; sourceIdx < strLstSize(sourcePaths); sourceIdx++)
+        {
+            const String *const source = strLstGet(sourcePaths, sourceIdx);
+
+            CHECK_FMT(
+                OptionInvalidError,
+                !strEq(destination, source) && !strEq(source, FSLASH_STR) && !strEq(destination, FSLASH_STR) &&
+                !strBeginsWith(destination, strNewFmt("%s/", strZ(source))) &&
+                !strBeginsWith(source, strNewFmt("%s/", strZ(destination))),
+                "fork restore destination '%s' overlaps source path '%s'", strZ(destination), strZ(source));
+        }
+    }
+}
 
 /**********************************************************************************************************************************/
 FN_EXTERN void
@@ -46,13 +226,29 @@ cmdRestore(void)
         // Validate restore path
         restorePathValidate();
 
+        // Get the backup set
+        const RestoreBackupData backupData = restoreBackupSet();
+        const InfoFork *const fork = forkInfoLoad(backupData.repoIdx);
+
+        if (fork != NULL)
+        {
+            CHECK(
+                OptionInvalidError, cfgOptionSeq(cfgOptType) != CFGOPTVAL_RESTORE_TYPE_PRESERVE,
+                "fork restore cannot preserve recovery settings");
+            cfgOptionSet(cfgOptRepo, cfgSourceParam, VARINT64(cfgOptionGroupIdxToKey(cfgOptGrpRepo, backupData.repoIdx)));
+            restoreRecoveryOption(infoForkData(fork)->pgVersion, true);
+        }
+
+        // Use the fork's latest timeline by default. Replace inherited settings and PostgreSQL defaults.
+        if (fork != NULL && !cfgOptionTest(cfgOptTargetTimeline) &&
+            (cfgOptionSeq(cfgOptType) == CFGOPTVAL_RESTORE_TYPE_DEFAULT ||
+             cfgOptionSeq(cfgOptType) == CFGOPTVAL_RESTORE_TYPE_STANDBY))
+            cfgOptionSet(cfgOptTargetTimeline, cfgSourceParam, VARSTRDEF("latest"));
+
         // Remove stanza archive spool path so existing files do not interfere with the new cluster. For instance, old archive-push
         // acknowledgements could cause a new cluster to skip archiving. This should not happen if a new timeline is selected but
         // better to be safe. Missing stanza spool paths are ignored.
         storagePathRemoveP(storageSpoolWrite(), STORAGE_SPOOL_ARCHIVE_STR, .recurse = true);
-
-        // Get the backup set
-        const RestoreBackupData backupData = restoreBackupSet();
 
         // Load manifest
         RestoreJobData jobData = {.repoIdx = backupData.repoIdx};
@@ -60,6 +256,9 @@ cmdRestore(void)
         jobData.manifest = manifestLoadFile(
             storageRepoIdx(backupData.repoIdx),
             strNewFmt(STORAGE_REPO_BACKUP "/%s/" BACKUP_MANIFEST_FILE, strZ(backupData.backupSet)), backupData.cipherSpecManifest);
+
+        if (fork != NULL)
+            restoreForkManifestClean(jobData.manifest);
 
         // Verify that the selected timeline is valid for the backup -- including current and latest timelines
         if (manifestData(jobData.manifest)->backupOptionOnline)
@@ -109,7 +308,11 @@ cmdRestore(void)
         LOG_INFO(strZ(message));
 
         // Map manifest
+        const StringList *const sourcePaths = fork == NULL ? NULL : restoreForkMap(jobData.manifest, fork, backupData.repoIdx);
         restoreManifestMap(jobData.manifest);
+
+        if (sourcePaths != NULL)
+            restoreForkMapValidate(jobData.manifest, sourcePaths);
 
         // Check that links are sane
         manifestLinkCheck(jobData.manifest);
@@ -120,6 +323,11 @@ cmdRestore(void)
         // Generate the selective restore expression
         const String *const expression = restoreSelectiveExpression(jobData.manifest);
         jobData.zeroExp = expression == NULL ? NULL : regExpNew(expression);
+
+        if (fork != NULL)
+            storagePutP(
+                storageNewWriteP(storagePgWrite(), STRDEF(RESTORE_FORK_FILE)),
+                BUFSTR(restoreForkIdentity(jobData.manifest, fork, backupData.repoIdx)));
 
         // Clean the data directory and build path/link structure
         restoreCleanBuild(jobData.manifest, jobData.rootReplaceUser, jobData.rootReplaceGroup);
@@ -174,7 +382,7 @@ cmdRestore(void)
         fileInfo.group = restoreManifestOwnerReplace(fileInfo.group, jobData.rootReplaceGroup);
         fileInfo.mode = fileInfo.mode & (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
-        restoreRecoveryWrite(jobData.manifest, &fileInfo);
+        restoreRecoveryWrite(jobData.manifest, &fileInfo, fork != NULL);
 
         // Remove backup.manifest
         storageRemoveP(storagePgWrite(), BACKUP_MANIFEST_FILE_STR);
@@ -270,6 +478,8 @@ cmdRestore(void)
                 CFGCMD_RESTORE " command encountered page checksum error(s) in %u file(s), check the log file for details",
                 checksumErrorFileTotal);
         }
+
+        storageRemoveP(storagePgWrite(), STRDEF(RESTORE_FORK_FILE));
     }
     MEM_CONTEXT_TEMP_END();
 

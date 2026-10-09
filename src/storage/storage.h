@@ -308,6 +308,9 @@ storageType(const Storage *const this)
 // Target reads by time (0 when not time-targeted)
 FN_EXTERN time_t storageTargetTime(const Storage *this);
 
+// Path expression callback for read-only views that use the same repository namespace
+FN_EXTERN StoragePathExpressionCallback *storagePathExpression(const Storage *this);
+
 /***********************************************************************************************************************************
 Macros for function logging
 ***********************************************************************************************************************************/

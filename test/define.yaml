@@ -724,6 +724,33 @@ unit:
       - info/infoBackup
 
   # --------------------------------------------------------------------------------------------------------------------------------
+  - name: info/info-fork
+    total: 2
+
+    coverage:
+      - info/infoFork
+
+    depend:
+      - command/backup/common
+
+  # --------------------------------------------------------------------------------------------------------------------------------
+  - name: storage/fork
+    total: 2
+
+    coverage:
+      - storage/fork/storage
+
+    depend:
+      - command/backup/blockMap
+
+  # --------------------------------------------------------------------------------------------------------------------------------
+  - name: command/fork/common
+    total: 6
+
+    coverage:
+      - command/fork/common
+
+  # --------------------------------------------------------------------------------------------------------------------------------
   - name: db/db
     total: 3
     containerReq: true
@@ -770,7 +797,7 @@ unit:
 
   # --------------------------------------------------------------------------------------------------------------------------------
   - name: command/archive/get
-    total: 3
+    total: 4
     binReq: true
 
     coverage:
@@ -778,10 +805,15 @@ unit:
       - command/archive/get/file
       - command/archive/get/get
       - command/archive/get/protocol
+      - command/archive/fork
+
+    depend:
+      - command/fork/common
+      - storage/fork/storage
 
   # --------------------------------------------------------------------------------------------------------------------------------
   - name: command/archive/push
-    total: 4
+    total: 5
     binReq: true
 
     coverage:
@@ -793,7 +825,7 @@ unit:
 
   # --------------------------------------------------------------------------------------------------------------------------------
   - name: command/stanza
-    total: 4
+    total: 5
 
     coverage:
       - command/stanza/common
@@ -822,7 +854,7 @@ unit:
 
   # --------------------------------------------------------------------------------------------------------------------------------
   - name: command/expire
-    total: 11
+    total: 12
 
     coverage:
       - command/expire/expire
@@ -940,6 +972,13 @@ unit:
       - command/verify/verify
 
   # --------------------------------------------------------------------------------------------------------------------------------
+  - name: command/fork/fork
+    total: 6
+
+    coverage:
+      - command/fork/fork
+
+  # --------------------------------------------------------------------------------------------------------------------------------
   - name: command/local
     total: 1
 
@@ -982,6 +1021,11 @@ integration:
 
   # --------------------------------------------------------------------------------------------------------------------------------
   - name: integration/all
+    db: true
+    total: 1
+    harness: host
+
+  - name: integration/fork
     db: true
     total: 1
     harness: host

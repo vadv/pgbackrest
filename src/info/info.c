@@ -226,8 +226,9 @@ infoNewLoad(
                             {
                                 MEM_CONTEXT_TEMP_BEGIN()
                                 {
-                                    // Dependent files are encrypted with the same cipher type as this one
-                                    const CipherType cipherType = cipherSpecType(cipherSpec);
+                                    // A fork manifest can be plaintext while its inherited files still use AES-256-CBC.
+                                    const CipherType cipherType = cipherSpecType(cipherSpec) == cipherTypeNone ?
+                                                                      cipherTypeAes256Cbc : cipherSpecType(cipherSpec);
                                     CipherSpecMap *const cipherSpecMap = cipherSpecMapNew();
                                     const Variant *const cipherPass = jsonToVar(value->value);
 

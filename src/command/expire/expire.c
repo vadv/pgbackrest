@@ -7,6 +7,7 @@ Expire Command
 #include "command/backup/common.h"
 #include "command/control/common.h"
 #include "command/expire/expire.h"
+#include "command/fork/common.h"
 #include "command/stanza/common.h"
 #include "common/debug.h"
 #include "common/format/format.h"
@@ -1191,6 +1192,18 @@ cmdExpire(void)
 
         for (unsigned int repoIdx = repoIdxMin; repoIdx <= repoIdxMax; repoIdx++)
         {
+            // Check source pins before updating metadata. Keep all source data while any fork depends on this stanza.
+            if (forkPinExists(repoIdx))
+            {
+                CHECK_FMT(
+                    FileInvalidError, adhocBackupLabel == NULL,
+                    "%s: cannot expire a selected backup while the stanza has dependent forks",
+                    cfgOptionGroupName(cfgOptGrpRepo, repoIdx));
+                LOG_WARN_FMT(
+                    "%s: expiration deferred because the stanza has dependent forks", cfgOptionGroupName(cfgOptGrpRepo, repoIdx));
+                continue;
+            }
+
             // Get the repo storage in case it is remote and encryption settings need to be pulled down
             const Storage *const storageRepo = storageRepoIdx(repoIdx);
             InfoBackup *infoBackup = NULL;
@@ -1201,6 +1214,7 @@ cmdExpire(void)
 
             TRY_BEGIN()
             {
+                forkInfoLoad(repoIdx);
                 // Load backup.info for this repo
                 infoBackup = infoBackupLoadFileReconstruct(storageRepo, INFO_BACKUP_PATH_FILE_STR, cfgCipherSpecMainIdx(repoIdx));
 

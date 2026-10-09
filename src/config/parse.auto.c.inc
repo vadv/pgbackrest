@@ -639,6 +639,20 @@ static const ParseRuleCommand parseRuleCommand[CFG_COMMAND_TOTAL] =
         ),                                                                                                             // cmd/expire
     ),                                                                                                                 // cmd/expire
     // -----------------------------------------------------------------------------------------------------------------------------
+    PARSE_RULE_COMMAND                                                                                                   // cmd/fork
+    (                                                                                                                    // cmd/fork
+        PARSE_RULE_COMMAND_NAME("fork"),                                                                                 // cmd/fork
+        PARSE_RULE_COMMAND_LOCK_REQUIRED(true),                                                                          // cmd/fork
+        PARSE_RULE_COMMAND_LOCK_TYPE(Restore),                                                                           // cmd/fork
+        PARSE_RULE_COMMAND_LOG_FILE(true),                                                                               // cmd/fork
+        PARSE_RULE_COMMAND_LOG_LEVEL_DEFAULT(Info),                                                                      // cmd/fork
+                                                                                                                         // cmd/fork
+        PARSE_RULE_COMMAND_ROLE_VALID_LIST                                                                               // cmd/fork
+        (                                                                                                                // cmd/fork
+            PARSE_RULE_COMMAND_ROLE(Main)                                                                                // cmd/fork
+        ),                                                                                                               // cmd/fork
+    ),                                                                                                                   // cmd/fork
+    // -----------------------------------------------------------------------------------------------------------------------------
     PARSE_RULE_COMMAND                                                                                                   // cmd/help
     (                                                                                                                    // cmd/help
         PARSE_RULE_COMMAND_NAME("help"),                                                                                 // cmd/help
@@ -906,6 +920,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                      // opt/allow-root
             PARSE_RULE_OPTION_COMMAND(Check)                                                                       // opt/allow-root
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                      // opt/allow-root
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                        // opt/allow-root
             PARSE_RULE_OPTION_COMMAND(Info)                                                                        // opt/allow-root
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                    // opt/allow-root
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                     // opt/allow-root
@@ -1489,6 +1504,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                            // opt/beta
             PARSE_RULE_OPTION_COMMAND(Check)                                                                             // opt/beta
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                            // opt/beta
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                              // opt/beta
             PARSE_RULE_OPTION_COMMAND(Info)                                                                              // opt/beta
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                          // opt/beta
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                           // opt/beta
@@ -1568,6 +1584,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                     // opt/buffer-size
             PARSE_RULE_OPTION_COMMAND(Check)                                                                      // opt/buffer-size
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                     // opt/buffer-size
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                       // opt/buffer-size
             PARSE_RULE_OPTION_COMMAND(Info)                                                                       // opt/buffer-size
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                   // opt/buffer-size
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                    // opt/buffer-size
@@ -2023,6 +2040,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                          // opt/config
             PARSE_RULE_OPTION_COMMAND(Check)                                                                           // opt/config
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                          // opt/config
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                            // opt/config
             PARSE_RULE_OPTION_COMMAND(Info)                                                                            // opt/config
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                        // opt/config
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                         // opt/config
@@ -2101,6 +2119,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                             // opt/config-include-path
             PARSE_RULE_OPTION_COMMAND(Check)                                                              // opt/config-include-path
             PARSE_RULE_OPTION_COMMAND(Expire)                                                             // opt/config-include-path
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                               // opt/config-include-path
             PARSE_RULE_OPTION_COMMAND(Info)                                                               // opt/config-include-path
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                           // opt/config-include-path
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                            // opt/config-include-path
@@ -2179,6 +2198,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                     // opt/config-path
             PARSE_RULE_OPTION_COMMAND(Check)                                                                      // opt/config-path
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                     // opt/config-path
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                       // opt/config-path
             PARSE_RULE_OPTION_COMMAND(Info)                                                                       // opt/config-path
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                   // opt/config-path
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                    // opt/config-path
@@ -2434,6 +2454,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                         // opt/exec-id
             PARSE_RULE_OPTION_COMMAND(Check)                                                                          // opt/exec-id
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                         // opt/exec-id
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                           // opt/exec-id
             PARSE_RULE_OPTION_COMMAND(Info)                                                                           // opt/exec-id
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                       // opt/exec-id
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                        // opt/exec-id
@@ -2642,6 +2663,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                      // opt/io-timeout
             PARSE_RULE_OPTION_COMMAND(Check)                                                                       // opt/io-timeout
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                      // opt/io-timeout
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                        // opt/io-timeout
             PARSE_RULE_OPTION_COMMAND(Info)                                                                        // opt/io-timeout
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                    // opt/io-timeout
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                     // opt/io-timeout
@@ -2908,6 +2930,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(ArchivePush)                                                                  // opt/lock-path
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                       // opt/lock-path
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                       // opt/lock-path
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                         // opt/lock-path
             PARSE_RULE_OPTION_COMMAND(Info)                                                                         // opt/lock-path
             PARSE_RULE_OPTION_COMMAND(Restore)                                                                      // opt/lock-path
             PARSE_RULE_OPTION_COMMAND(StanzaCreate)                                                                 // opt/lock-path
@@ -2974,6 +2997,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                               // opt/log-level-console
             PARSE_RULE_OPTION_COMMAND(Check)                                                                // opt/log-level-console
             PARSE_RULE_OPTION_COMMAND(Expire)                                                               // opt/log-level-console
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                 // opt/log-level-console
             PARSE_RULE_OPTION_COMMAND(Info)                                                                 // opt/log-level-console
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                             // opt/log-level-console
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                              // opt/log-level-console
@@ -3066,6 +3090,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                  // opt/log-level-file
             PARSE_RULE_OPTION_COMMAND(Check)                                                                   // opt/log-level-file
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                  // opt/log-level-file
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                    // opt/log-level-file
             PARSE_RULE_OPTION_COMMAND(Info)                                                                    // opt/log-level-file
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                // opt/log-level-file
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                 // opt/log-level-file
@@ -3158,6 +3183,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                // opt/log-level-stderr
             PARSE_RULE_OPTION_COMMAND(Check)                                                                 // opt/log-level-stderr
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                // opt/log-level-stderr
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                  // opt/log-level-stderr
             PARSE_RULE_OPTION_COMMAND(Info)                                                                  // opt/log-level-stderr
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                              // opt/log-level-stderr
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                               // opt/log-level-stderr
@@ -3248,6 +3274,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                        // opt/log-path
             PARSE_RULE_OPTION_COMMAND(Check)                                                                         // opt/log-path
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                        // opt/log-path
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                          // opt/log-path
             PARSE_RULE_OPTION_COMMAND(Info)                                                                          // opt/log-path
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                      // opt/log-path
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                       // opt/log-path
@@ -3404,6 +3431,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                   // opt/log-timestamp
             PARSE_RULE_OPTION_COMMAND(Check)                                                                    // opt/log-timestamp
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                   // opt/log-timestamp
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                     // opt/log-timestamp
             PARSE_RULE_OPTION_COMMAND(Info)                                                                     // opt/log-timestamp
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                 // opt/log-timestamp
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                  // opt/log-timestamp
@@ -3515,6 +3543,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                   // opt/neutral-umask
             PARSE_RULE_OPTION_COMMAND(Check)                                                                    // opt/neutral-umask
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                   // opt/neutral-umask
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                     // opt/neutral-umask
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                  // opt/neutral-umask
             PARSE_RULE_OPTION_COMMAND(RepoLs)                                                                   // opt/neutral-umask
             PARSE_RULE_OPTION_COMMAND(RepoRm)                                                                   // opt/neutral-umask
@@ -4670,6 +4699,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                        // opt/priority
             PARSE_RULE_OPTION_COMMAND(Check)                                                                         // opt/priority
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                        // opt/priority
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                          // opt/priority
             PARSE_RULE_OPTION_COMMAND(Info)                                                                          // opt/priority
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                      // opt/priority
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                       // opt/priority
@@ -4841,6 +4871,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                // opt/protocol-timeout
             PARSE_RULE_OPTION_COMMAND(Check)                                                                 // opt/protocol-timeout
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                // opt/protocol-timeout
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                  // opt/protocol-timeout
             PARSE_RULE_OPTION_COMMAND(Info)                                                                  // opt/protocol-timeout
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                              // opt/protocol-timeout
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                               // opt/protocol-timeout
@@ -5063,8 +5094,10 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
         (                                                                                                                // opt/repo
             PARSE_RULE_OPTION_COMMAND(Annotate)                                                                          // opt/repo
             PARSE_RULE_OPTION_COMMAND(ArchiveGet)                                                                        // opt/repo
+            PARSE_RULE_OPTION_COMMAND(ArchivePush)                                                                       // opt/repo
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                            // opt/repo
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                            // opt/repo
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                              // opt/repo
             PARSE_RULE_OPTION_COMMAND(Info)                                                                              // opt/repo
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                          // opt/repo
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                           // opt/repo
@@ -5139,6 +5172,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                              // opt/repo-azure-account
             PARSE_RULE_OPTION_COMMAND(Check)                                                               // opt/repo-azure-account
             PARSE_RULE_OPTION_COMMAND(Expire)                                                              // opt/repo-azure-account
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                // opt/repo-azure-account
             PARSE_RULE_OPTION_COMMAND(Info)                                                                // opt/repo-azure-account
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                            // opt/repo-azure-account
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                             // opt/repo-azure-account
@@ -5216,6 +5250,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                            // opt/repo-azure-container
             PARSE_RULE_OPTION_COMMAND(Check)                                                             // opt/repo-azure-container
             PARSE_RULE_OPTION_COMMAND(Expire)                                                            // opt/repo-azure-container
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                              // opt/repo-azure-container
             PARSE_RULE_OPTION_COMMAND(Info)                                                              // opt/repo-azure-container
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                          // opt/repo-azure-container
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                           // opt/repo-azure-container
@@ -5294,6 +5329,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                             // opt/repo-azure-endpoint
             PARSE_RULE_OPTION_COMMAND(Check)                                                              // opt/repo-azure-endpoint
             PARSE_RULE_OPTION_COMMAND(Expire)                                                             // opt/repo-azure-endpoint
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                               // opt/repo-azure-endpoint
             PARSE_RULE_OPTION_COMMAND(Info)                                                               // opt/repo-azure-endpoint
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                           // opt/repo-azure-endpoint
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                            // opt/repo-azure-endpoint
@@ -5377,6 +5413,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                  // opt/repo-azure-key
             PARSE_RULE_OPTION_COMMAND(Check)                                                                   // opt/repo-azure-key
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                  // opt/repo-azure-key
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                    // opt/repo-azure-key
             PARSE_RULE_OPTION_COMMAND(Info)                                                                    // opt/repo-azure-key
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                // opt/repo-azure-key
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                 // opt/repo-azure-key
@@ -5456,6 +5493,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                             // opt/repo-azure-key-type
             PARSE_RULE_OPTION_COMMAND(Check)                                                              // opt/repo-azure-key-type
             PARSE_RULE_OPTION_COMMAND(Expire)                                                             // opt/repo-azure-key-type
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                               // opt/repo-azure-key-type
             PARSE_RULE_OPTION_COMMAND(Info)                                                               // opt/repo-azure-key-type
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                           // opt/repo-azure-key-type
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                            // opt/repo-azure-key-type
@@ -5546,6 +5584,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                            // opt/repo-azure-uri-style
             PARSE_RULE_OPTION_COMMAND(Check)                                                             // opt/repo-azure-uri-style
             PARSE_RULE_OPTION_COMMAND(Expire)                                                            // opt/repo-azure-uri-style
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                              // opt/repo-azure-uri-style
             PARSE_RULE_OPTION_COMMAND(Info)                                                              // opt/repo-azure-uri-style
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                          // opt/repo-azure-uri-style
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                           // opt/repo-azure-uri-style
@@ -5938,6 +5977,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                // opt/repo-cipher-pass
             PARSE_RULE_OPTION_COMMAND(Check)                                                                 // opt/repo-cipher-pass
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                // opt/repo-cipher-pass
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                  // opt/repo-cipher-pass
             PARSE_RULE_OPTION_COMMAND(Info)                                                                  // opt/repo-cipher-pass
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                              // opt/repo-cipher-pass
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                               // opt/repo-cipher-pass
@@ -6055,6 +6095,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                // opt/repo-cipher-type
             PARSE_RULE_OPTION_COMMAND(Check)                                                                 // opt/repo-cipher-type
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                // opt/repo-cipher-type
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                  // opt/repo-cipher-type
             PARSE_RULE_OPTION_COMMAND(Info)                                                                  // opt/repo-cipher-type
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                              // opt/repo-cipher-type
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                               // opt/repo-cipher-type
@@ -6169,6 +6210,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                 // opt/repo-gcs-bucket
             PARSE_RULE_OPTION_COMMAND(Check)                                                                  // opt/repo-gcs-bucket
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                 // opt/repo-gcs-bucket
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                   // opt/repo-gcs-bucket
             PARSE_RULE_OPTION_COMMAND(Info)                                                                   // opt/repo-gcs-bucket
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                               // opt/repo-gcs-bucket
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                // opt/repo-gcs-bucket
@@ -6245,6 +6287,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                               // opt/repo-gcs-endpoint
             PARSE_RULE_OPTION_COMMAND(Check)                                                                // opt/repo-gcs-endpoint
             PARSE_RULE_OPTION_COMMAND(Expire)                                                               // opt/repo-gcs-endpoint
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                 // opt/repo-gcs-endpoint
             PARSE_RULE_OPTION_COMMAND(Info)                                                                 // opt/repo-gcs-endpoint
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                             // opt/repo-gcs-endpoint
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                              // opt/repo-gcs-endpoint
@@ -6327,6 +6370,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                    // opt/repo-gcs-key
             PARSE_RULE_OPTION_COMMAND(Check)                                                                     // opt/repo-gcs-key
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                    // opt/repo-gcs-key
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                      // opt/repo-gcs-key
             PARSE_RULE_OPTION_COMMAND(Info)                                                                      // opt/repo-gcs-key
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                  // opt/repo-gcs-key
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                   // opt/repo-gcs-key
@@ -6407,6 +6451,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                               // opt/repo-gcs-key-type
             PARSE_RULE_OPTION_COMMAND(Check)                                                                // opt/repo-gcs-key-type
             PARSE_RULE_OPTION_COMMAND(Expire)                                                               // opt/repo-gcs-key-type
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                 // opt/repo-gcs-key-type
             PARSE_RULE_OPTION_COMMAND(Info)                                                                 // opt/repo-gcs-key-type
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                             // opt/repo-gcs-key-type
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                              // opt/repo-gcs-key-type
@@ -6497,6 +6542,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                           // opt/repo-gcs-user-project
             PARSE_RULE_OPTION_COMMAND(Check)                                                            // opt/repo-gcs-user-project
             PARSE_RULE_OPTION_COMMAND(Expire)                                                           // opt/repo-gcs-user-project
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                             // opt/repo-gcs-user-project
             PARSE_RULE_OPTION_COMMAND(Info)                                                             // opt/repo-gcs-user-project
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                         // opt/repo-gcs-user-project
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                          // opt/repo-gcs-user-project
@@ -6596,6 +6642,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                       // opt/repo-host
             PARSE_RULE_OPTION_COMMAND(Check)                                                                        // opt/repo-host
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                       // opt/repo-host
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                         // opt/repo-host
             PARSE_RULE_OPTION_COMMAND(Info)                                                                         // opt/repo-host
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                     // opt/repo-host
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                      // opt/repo-host
@@ -6653,6 +6700,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                               // opt/repo-host-ca-file
             PARSE_RULE_OPTION_COMMAND(Check)                                                                // opt/repo-host-ca-file
             PARSE_RULE_OPTION_COMMAND(Expire)                                                               // opt/repo-host-ca-file
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                 // opt/repo-host-ca-file
             PARSE_RULE_OPTION_COMMAND(Info)                                                                 // opt/repo-host-ca-file
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                             // opt/repo-host-ca-file
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                              // opt/repo-host-ca-file
@@ -6710,6 +6758,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                               // opt/repo-host-ca-path
             PARSE_RULE_OPTION_COMMAND(Check)                                                                // opt/repo-host-ca-path
             PARSE_RULE_OPTION_COMMAND(Expire)                                                               // opt/repo-host-ca-path
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                 // opt/repo-host-ca-path
             PARSE_RULE_OPTION_COMMAND(Info)                                                                 // opt/repo-host-ca-path
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                             // opt/repo-host-ca-path
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                              // opt/repo-host-ca-path
@@ -6767,6 +6816,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                             // opt/repo-host-cert-file
             PARSE_RULE_OPTION_COMMAND(Check)                                                              // opt/repo-host-cert-file
             PARSE_RULE_OPTION_COMMAND(Expire)                                                             // opt/repo-host-cert-file
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                               // opt/repo-host-cert-file
             PARSE_RULE_OPTION_COMMAND(Info)                                                               // opt/repo-host-cert-file
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                           // opt/repo-host-cert-file
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                            // opt/repo-host-cert-file
@@ -6825,6 +6875,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                   // opt/repo-host-cmd
             PARSE_RULE_OPTION_COMMAND(Check)                                                                    // opt/repo-host-cmd
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                   // opt/repo-host-cmd
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                     // opt/repo-host-cmd
             PARSE_RULE_OPTION_COMMAND(Info)                                                                     // opt/repo-host-cmd
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                 // opt/repo-host-cmd
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                  // opt/repo-host-cmd
@@ -6887,6 +6938,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                // opt/repo-host-config
             PARSE_RULE_OPTION_COMMAND(Check)                                                                 // opt/repo-host-config
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                // opt/repo-host-config
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                  // opt/repo-host-config
             PARSE_RULE_OPTION_COMMAND(Info)                                                                  // opt/repo-host-config
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                              // opt/repo-host-config
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                               // opt/repo-host-config
@@ -6948,6 +7000,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                   // opt/repo-host-config-include-path
             PARSE_RULE_OPTION_COMMAND(Check)                                                    // opt/repo-host-config-include-path
             PARSE_RULE_OPTION_COMMAND(Expire)                                                   // opt/repo-host-config-include-path
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                     // opt/repo-host-config-include-path
             PARSE_RULE_OPTION_COMMAND(Info)                                                     // opt/repo-host-config-include-path
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                 // opt/repo-host-config-include-path
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                  // opt/repo-host-config-include-path
@@ -7009,6 +7062,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                           // opt/repo-host-config-path
             PARSE_RULE_OPTION_COMMAND(Check)                                                            // opt/repo-host-config-path
             PARSE_RULE_OPTION_COMMAND(Expire)                                                           // opt/repo-host-config-path
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                             // opt/repo-host-config-path
             PARSE_RULE_OPTION_COMMAND(Info)                                                             // opt/repo-host-config-path
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                         // opt/repo-host-config-path
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                          // opt/repo-host-config-path
@@ -7070,6 +7124,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                              // opt/repo-host-key-file
             PARSE_RULE_OPTION_COMMAND(Check)                                                               // opt/repo-host-key-file
             PARSE_RULE_OPTION_COMMAND(Expire)                                                              // opt/repo-host-key-file
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                // opt/repo-host-key-file
             PARSE_RULE_OPTION_COMMAND(Info)                                                                // opt/repo-host-key-file
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                            // opt/repo-host-key-file
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                             // opt/repo-host-key-file
@@ -7127,6 +7182,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                  // opt/repo-host-port
             PARSE_RULE_OPTION_COMMAND(Check)                                                                   // opt/repo-host-port
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                  // opt/repo-host-port
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                    // opt/repo-host-port
             PARSE_RULE_OPTION_COMMAND(Info)                                                                    // opt/repo-host-port
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                // opt/repo-host-port
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                 // opt/repo-host-port
@@ -7200,6 +7256,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                  // opt/repo-host-type
             PARSE_RULE_OPTION_COMMAND(Check)                                                                   // opt/repo-host-type
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                  // opt/repo-host-type
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                    // opt/repo-host-type
             PARSE_RULE_OPTION_COMMAND(Info)                                                                    // opt/repo-host-type
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                // opt/repo-host-type
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                 // opt/repo-host-type
@@ -7267,6 +7324,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                  // opt/repo-host-user
             PARSE_RULE_OPTION_COMMAND(Check)                                                                   // opt/repo-host-user
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                  // opt/repo-host-user
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                    // opt/repo-host-user
             PARSE_RULE_OPTION_COMMAND(Info)                                                                    // opt/repo-host-user
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                // opt/repo-host-user
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                 // opt/repo-host-user
@@ -7331,6 +7389,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                      // opt/repo-local
             PARSE_RULE_OPTION_COMMAND(Check)                                                                       // opt/repo-local
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                      // opt/repo-local
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                        // opt/repo-local
             PARSE_RULE_OPTION_COMMAND(Info)                                                                        // opt/repo-local
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                    // opt/repo-local
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                     // opt/repo-local
@@ -7388,6 +7447,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                       // opt/repo-path
             PARSE_RULE_OPTION_COMMAND(Check)                                                                        // opt/repo-path
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                       // opt/repo-path
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                         // opt/repo-path
             PARSE_RULE_OPTION_COMMAND(Info)                                                                         // opt/repo-path
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                     // opt/repo-path
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                      // opt/repo-path
@@ -7645,6 +7705,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                  // opt/repo-s3-bucket
             PARSE_RULE_OPTION_COMMAND(Check)                                                                   // opt/repo-s3-bucket
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                  // opt/repo-s3-bucket
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                    // opt/repo-s3-bucket
             PARSE_RULE_OPTION_COMMAND(Info)                                                                    // opt/repo-s3-bucket
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                // opt/repo-s3-bucket
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                 // opt/repo-s3-bucket
@@ -7723,6 +7784,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                // opt/repo-s3-endpoint
             PARSE_RULE_OPTION_COMMAND(Check)                                                                 // opt/repo-s3-endpoint
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                // opt/repo-s3-endpoint
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                  // opt/repo-s3-endpoint
             PARSE_RULE_OPTION_COMMAND(Info)                                                                  // opt/repo-s3-endpoint
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                              // opt/repo-s3-endpoint
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                               // opt/repo-s3-endpoint
@@ -7802,6 +7864,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                     // opt/repo-s3-key
             PARSE_RULE_OPTION_COMMAND(Check)                                                                      // opt/repo-s3-key
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                     // opt/repo-s3-key
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                       // opt/repo-s3-key
             PARSE_RULE_OPTION_COMMAND(Info)                                                                       // opt/repo-s3-key
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                   // opt/repo-s3-key
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                    // opt/repo-s3-key
@@ -7881,6 +7944,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                              // opt/repo-s3-key-secret
             PARSE_RULE_OPTION_COMMAND(Check)                                                               // opt/repo-s3-key-secret
             PARSE_RULE_OPTION_COMMAND(Expire)                                                              // opt/repo-s3-key-secret
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                // opt/repo-s3-key-secret
             PARSE_RULE_OPTION_COMMAND(Info)                                                                // opt/repo-s3-key-secret
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                            // opt/repo-s3-key-secret
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                             // opt/repo-s3-key-secret
@@ -7959,6 +8023,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                // opt/repo-s3-key-type
             PARSE_RULE_OPTION_COMMAND(Check)                                                                 // opt/repo-s3-key-type
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                // opt/repo-s3-key-type
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                  // opt/repo-s3-key-type
             PARSE_RULE_OPTION_COMMAND(Info)                                                                  // opt/repo-s3-key-type
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                              // opt/repo-s3-key-type
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                               // opt/repo-s3-key-type
@@ -8050,6 +8115,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                              // opt/repo-s3-kms-key-id
             PARSE_RULE_OPTION_COMMAND(Check)                                                               // opt/repo-s3-kms-key-id
             PARSE_RULE_OPTION_COMMAND(Expire)                                                              // opt/repo-s3-kms-key-id
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                // opt/repo-s3-kms-key-id
             PARSE_RULE_OPTION_COMMAND(Info)                                                                // opt/repo-s3-kms-key-id
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                            // opt/repo-s3-kms-key-id
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                             // opt/repo-s3-kms-key-id
@@ -8128,6 +8194,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                             // opt/repo-s3-process-cmd
             PARSE_RULE_OPTION_COMMAND(Check)                                                              // opt/repo-s3-process-cmd
             PARSE_RULE_OPTION_COMMAND(Expire)                                                             // opt/repo-s3-process-cmd
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                               // opt/repo-s3-process-cmd
             PARSE_RULE_OPTION_COMMAND(Info)                                                               // opt/repo-s3-process-cmd
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                           // opt/repo-s3-process-cmd
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                            // opt/repo-s3-process-cmd
@@ -8206,6 +8273,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                  // opt/repo-s3-region
             PARSE_RULE_OPTION_COMMAND(Check)                                                                   // opt/repo-s3-region
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                  // opt/repo-s3-region
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                    // opt/repo-s3-region
             PARSE_RULE_OPTION_COMMAND(Info)                                                                    // opt/repo-s3-region
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                // opt/repo-s3-region
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                 // opt/repo-s3-region
@@ -8284,6 +8352,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                          // opt/repo-s3-requester-pays
             PARSE_RULE_OPTION_COMMAND(Check)                                                           // opt/repo-s3-requester-pays
             PARSE_RULE_OPTION_COMMAND(Expire)                                                          // opt/repo-s3-requester-pays
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                            // opt/repo-s3-requester-pays
             PARSE_RULE_OPTION_COMMAND(Info)                                                            // opt/repo-s3-requester-pays
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                        // opt/repo-s3-requester-pays
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                         // opt/repo-s3-requester-pays
@@ -8366,6 +8435,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                    // opt/repo-s3-role
             PARSE_RULE_OPTION_COMMAND(Check)                                                                     // opt/repo-s3-role
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                    // opt/repo-s3-role
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                      // opt/repo-s3-role
             PARSE_RULE_OPTION_COMMAND(Info)                                                                      // opt/repo-s3-role
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                  // opt/repo-s3-role
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                   // opt/repo-s3-role
@@ -8443,6 +8513,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                 // opt/repo-s3-service
             PARSE_RULE_OPTION_COMMAND(Check)                                                                  // opt/repo-s3-service
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                 // opt/repo-s3-service
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                   // opt/repo-s3-service
             PARSE_RULE_OPTION_COMMAND(Info)                                                                   // opt/repo-s3-service
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                               // opt/repo-s3-service
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                // opt/repo-s3-service
@@ -8526,6 +8597,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                        // opt/repo-s3-sse-customer-key
             PARSE_RULE_OPTION_COMMAND(Check)                                                         // opt/repo-s3-sse-customer-key
             PARSE_RULE_OPTION_COMMAND(Expire)                                                        // opt/repo-s3-sse-customer-key
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                          // opt/repo-s3-sse-customer-key
             PARSE_RULE_OPTION_COMMAND(Info)                                                          // opt/repo-s3-sse-customer-key
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                      // opt/repo-s3-sse-customer-key
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                       // opt/repo-s3-sse-customer-key
@@ -8603,6 +8675,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                // opt/repo-s3-sts-host
             PARSE_RULE_OPTION_COMMAND(Check)                                                                 // opt/repo-s3-sts-host
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                // opt/repo-s3-sts-host
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                  // opt/repo-s3-sts-host
             PARSE_RULE_OPTION_COMMAND(Info)                                                                  // opt/repo-s3-sts-host
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                              // opt/repo-s3-sts-host
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                               // opt/repo-s3-sts-host
@@ -8686,6 +8759,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                   // opt/repo-s3-token
             PARSE_RULE_OPTION_COMMAND(Check)                                                                    // opt/repo-s3-token
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                   // opt/repo-s3-token
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                     // opt/repo-s3-token
             PARSE_RULE_OPTION_COMMAND(Info)                                                                     // opt/repo-s3-token
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                 // opt/repo-s3-token
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                  // opt/repo-s3-token
@@ -8764,6 +8838,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                               // opt/repo-s3-uri-style
             PARSE_RULE_OPTION_COMMAND(Check)                                                                // opt/repo-s3-uri-style
             PARSE_RULE_OPTION_COMMAND(Expire)                                                               // opt/repo-s3-uri-style
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                 // opt/repo-s3-uri-style
             PARSE_RULE_OPTION_COMMAND(Info)                                                                 // opt/repo-s3-uri-style
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                             // opt/repo-s3-uri-style
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                              // opt/repo-s3-uri-style
@@ -8852,6 +8927,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                  // opt/repo-sftp-host
             PARSE_RULE_OPTION_COMMAND(Check)                                                                   // opt/repo-sftp-host
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                  // opt/repo-sftp-host
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                    // opt/repo-sftp-host
             PARSE_RULE_OPTION_COMMAND(Info)                                                                    // opt/repo-sftp-host
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                // opt/repo-sftp-host
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                 // opt/repo-sftp-host
@@ -8929,6 +9005,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                      // opt/repo-sftp-host-fingerprint
             PARSE_RULE_OPTION_COMMAND(Check)                                                       // opt/repo-sftp-host-fingerprint
             PARSE_RULE_OPTION_COMMAND(Expire)                                                      // opt/repo-sftp-host-fingerprint
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                        // opt/repo-sftp-host-fingerprint
             PARSE_RULE_OPTION_COMMAND(Info)                                                        // opt/repo-sftp-host-fingerprint
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                    // opt/repo-sftp-host-fingerprint
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                     // opt/repo-sftp-host-fingerprint
@@ -9007,6 +9084,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                   // opt/repo-sftp-host-key-check-type
             PARSE_RULE_OPTION_COMMAND(Check)                                                    // opt/repo-sftp-host-key-check-type
             PARSE_RULE_OPTION_COMMAND(Expire)                                                   // opt/repo-sftp-host-key-check-type
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                     // opt/repo-sftp-host-key-check-type
             PARSE_RULE_OPTION_COMMAND(Info)                                                     // opt/repo-sftp-host-key-check-type
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                 // opt/repo-sftp-host-key-check-type
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                  // opt/repo-sftp-host-key-check-type
@@ -9097,6 +9175,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                    // opt/repo-sftp-host-key-hash-type
             PARSE_RULE_OPTION_COMMAND(Check)                                                     // opt/repo-sftp-host-key-hash-type
             PARSE_RULE_OPTION_COMMAND(Expire)                                                    // opt/repo-sftp-host-key-hash-type
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                      // opt/repo-sftp-host-key-hash-type
             PARSE_RULE_OPTION_COMMAND(Info)                                                      // opt/repo-sftp-host-key-hash-type
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                  // opt/repo-sftp-host-key-hash-type
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                   // opt/repo-sftp-host-key-hash-type
@@ -9181,6 +9260,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                             // opt/repo-sftp-host-port
             PARSE_RULE_OPTION_COMMAND(Check)                                                              // opt/repo-sftp-host-port
             PARSE_RULE_OPTION_COMMAND(Expire)                                                             // opt/repo-sftp-host-port
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                               // opt/repo-sftp-host-port
             PARSE_RULE_OPTION_COMMAND(Info)                                                               // opt/repo-sftp-host-port
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                           // opt/repo-sftp-host-port
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                            // opt/repo-sftp-host-port
@@ -9269,6 +9349,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                             // opt/repo-sftp-host-user
             PARSE_RULE_OPTION_COMMAND(Check)                                                              // opt/repo-sftp-host-user
             PARSE_RULE_OPTION_COMMAND(Expire)                                                             // opt/repo-sftp-host-user
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                               // opt/repo-sftp-host-user
             PARSE_RULE_OPTION_COMMAND(Info)                                                               // opt/repo-sftp-host-user
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                           // opt/repo-sftp-host-user
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                            // opt/repo-sftp-host-user
@@ -9347,6 +9428,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                            // opt/repo-sftp-known-host
             PARSE_RULE_OPTION_COMMAND(Check)                                                             // opt/repo-sftp-known-host
             PARSE_RULE_OPTION_COMMAND(Expire)                                                            // opt/repo-sftp-known-host
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                              // opt/repo-sftp-known-host
             PARSE_RULE_OPTION_COMMAND(Info)                                                              // opt/repo-sftp-known-host
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                          // opt/repo-sftp-known-host
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                           // opt/repo-sftp-known-host
@@ -9425,6 +9507,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                      // opt/repo-sftp-private-key-file
             PARSE_RULE_OPTION_COMMAND(Check)                                                       // opt/repo-sftp-private-key-file
             PARSE_RULE_OPTION_COMMAND(Expire)                                                      // opt/repo-sftp-private-key-file
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                        // opt/repo-sftp-private-key-file
             PARSE_RULE_OPTION_COMMAND(Info)                                                        // opt/repo-sftp-private-key-file
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                    // opt/repo-sftp-private-key-file
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                     // opt/repo-sftp-private-key-file
@@ -9503,6 +9586,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                // opt/repo-sftp-private-key-passphrase
             PARSE_RULE_OPTION_COMMAND(Check)                                                 // opt/repo-sftp-private-key-passphrase
             PARSE_RULE_OPTION_COMMAND(Expire)                                                // opt/repo-sftp-private-key-passphrase
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                  // opt/repo-sftp-private-key-passphrase
             PARSE_RULE_OPTION_COMMAND(Info)                                                  // opt/repo-sftp-private-key-passphrase
             PARSE_RULE_OPTION_COMMAND(Manifest)                                              // opt/repo-sftp-private-key-passphrase
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                               // opt/repo-sftp-private-key-passphrase
@@ -9580,6 +9664,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                       // opt/repo-sftp-public-key-file
             PARSE_RULE_OPTION_COMMAND(Check)                                                        // opt/repo-sftp-public-key-file
             PARSE_RULE_OPTION_COMMAND(Expire)                                                       // opt/repo-sftp-public-key-file
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                         // opt/repo-sftp-public-key-file
             PARSE_RULE_OPTION_COMMAND(Info)                                                         // opt/repo-sftp-public-key-file
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                     // opt/repo-sftp-public-key-file
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                      // opt/repo-sftp-public-key-file
@@ -9657,6 +9742,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                            // opt/repo-storage-ca-file
             PARSE_RULE_OPTION_COMMAND(Check)                                                             // opt/repo-storage-ca-file
             PARSE_RULE_OPTION_COMMAND(Expire)                                                            // opt/repo-storage-ca-file
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                              // opt/repo-storage-ca-file
             PARSE_RULE_OPTION_COMMAND(Info)                                                              // opt/repo-storage-ca-file
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                          // opt/repo-storage-ca-file
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                           // opt/repo-storage-ca-file
@@ -9736,6 +9822,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                            // opt/repo-storage-ca-path
             PARSE_RULE_OPTION_COMMAND(Check)                                                             // opt/repo-storage-ca-path
             PARSE_RULE_OPTION_COMMAND(Expire)                                                            // opt/repo-storage-ca-path
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                              // opt/repo-storage-ca-path
             PARSE_RULE_OPTION_COMMAND(Info)                                                              // opt/repo-storage-ca-path
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                          // opt/repo-storage-ca-path
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                           // opt/repo-storage-ca-path
@@ -9815,6 +9902,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                               // opt/repo-storage-host
             PARSE_RULE_OPTION_COMMAND(Check)                                                                // opt/repo-storage-host
             PARSE_RULE_OPTION_COMMAND(Expire)                                                               // opt/repo-storage-host
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                 // opt/repo-storage-host
             PARSE_RULE_OPTION_COMMAND(Info)                                                                 // opt/repo-storage-host
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                             // opt/repo-storage-host
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                              // opt/repo-storage-host
@@ -9893,6 +9981,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                               // opt/repo-storage-port
             PARSE_RULE_OPTION_COMMAND(Check)                                                                // opt/repo-storage-port
             PARSE_RULE_OPTION_COMMAND(Expire)                                                               // opt/repo-storage-port
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                 // opt/repo-storage-port
             PARSE_RULE_OPTION_COMMAND(Info)                                                                 // opt/repo-storage-port
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                             // opt/repo-storage-port
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                              // opt/repo-storage-port
@@ -9982,6 +10071,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                           // opt/repo-storage-prefetch
             PARSE_RULE_OPTION_COMMAND(Check)                                                            // opt/repo-storage-prefetch
             PARSE_RULE_OPTION_COMMAND(Expire)                                                           // opt/repo-storage-prefetch
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                             // opt/repo-storage-prefetch
             PARSE_RULE_OPTION_COMMAND(Info)                                                             // opt/repo-storage-prefetch
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                         // opt/repo-storage-prefetch
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                          // opt/repo-storage-prefetch
@@ -10072,6 +10162,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                          // opt/repo-storage-read-over
             PARSE_RULE_OPTION_COMMAND(Check)                                                           // opt/repo-storage-read-over
             PARSE_RULE_OPTION_COMMAND(Expire)                                                          // opt/repo-storage-read-over
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                            // opt/repo-storage-read-over
             PARSE_RULE_OPTION_COMMAND(Info)                                                            // opt/repo-storage-read-over
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                        // opt/repo-storage-read-over
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                         // opt/repo-storage-read-over
@@ -10163,6 +10254,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                // opt/repo-storage-tag
             PARSE_RULE_OPTION_COMMAND(Check)                                                                 // opt/repo-storage-tag
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                // opt/repo-storage-tag
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                  // opt/repo-storage-tag
             PARSE_RULE_OPTION_COMMAND(Info)                                                                  // opt/repo-storage-tag
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                              // opt/repo-storage-tag
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                               // opt/repo-storage-tag
@@ -10242,6 +10334,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                  // opt/repo-storage-upload-chunk-size
             PARSE_RULE_OPTION_COMMAND(Check)                                                   // opt/repo-storage-upload-chunk-size
             PARSE_RULE_OPTION_COMMAND(Expire)                                                  // opt/repo-storage-upload-chunk-size
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                    // opt/repo-storage-upload-chunk-size
             PARSE_RULE_OPTION_COMMAND(Info)                                                    // opt/repo-storage-upload-chunk-size
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                // opt/repo-storage-upload-chunk-size
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                 // opt/repo-storage-upload-chunk-size
@@ -10351,6 +10444,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                         // opt/repo-storage-verify-tls
             PARSE_RULE_OPTION_COMMAND(Check)                                                          // opt/repo-storage-verify-tls
             PARSE_RULE_OPTION_COMMAND(Expire)                                                         // opt/repo-storage-verify-tls
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                           // opt/repo-storage-verify-tls
             PARSE_RULE_OPTION_COMMAND(Info)                                                           // opt/repo-storage-verify-tls
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                       // opt/repo-storage-verify-tls
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                        // opt/repo-storage-verify-tls
@@ -10503,6 +10597,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                       // opt/repo-type
             PARSE_RULE_OPTION_COMMAND(Check)                                                                        // opt/repo-type
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                       // opt/repo-type
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                         // opt/repo-type
             PARSE_RULE_OPTION_COMMAND(Info)                                                                         // opt/repo-type
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                     // opt/repo-type
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                      // opt/repo-type
@@ -10644,6 +10739,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                       // opt/sck-block
             PARSE_RULE_OPTION_COMMAND(Check)                                                                        // opt/sck-block
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                       // opt/sck-block
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                         // opt/sck-block
             PARSE_RULE_OPTION_COMMAND(Info)                                                                         // opt/sck-block
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                     // opt/sck-block
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                      // opt/sck-block
@@ -10722,6 +10818,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                  // opt/sck-keep-alive
             PARSE_RULE_OPTION_COMMAND(Check)                                                                   // opt/sck-keep-alive
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                  // opt/sck-keep-alive
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                    // opt/sck-keep-alive
             PARSE_RULE_OPTION_COMMAND(Info)                                                                    // opt/sck-keep-alive
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                // opt/sck-keep-alive
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                 // opt/sck-keep-alive
@@ -10794,6 +10891,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
         (                                                                                                                 // opt/set
             PARSE_RULE_OPTION_COMMAND(Annotate)                                                                           // opt/set
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                             // opt/set
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                               // opt/set
             PARSE_RULE_OPTION_COMMAND(Info)                                                                               // opt/set
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                           // opt/set
             PARSE_RULE_OPTION_COMMAND(Restore)                                                                            // opt/set
@@ -10816,19 +10914,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             (                                                                                                             // opt/set
                 PARSE_RULE_FILTER_CMD                                                                                     // opt/set
                 (                                                                                                         // opt/set
-                    PARSE_RULE_VAL_CMD(Info),                                                                             // opt/set
-                ),                                                                                                        // opt/set
-                                                                                                                          // opt/set
-                PARSE_RULE_OPTIONAL_DEPEND                                                                                // opt/set
-                (                                                                                                         // opt/set
-                    PARSE_RULE_VAL_OPT(Stanza),                                                                           // opt/set
-                ),                                                                                                        // opt/set
-            ),                                                                                                            // opt/set
-                                                                                                                          // opt/set
-            PARSE_RULE_OPTIONAL_GROUP                                                                                     // opt/set
-            (                                                                                                             // opt/set
-                PARSE_RULE_FILTER_CMD                                                                                     // opt/set
-                (                                                                                                         // opt/set
+                    PARSE_RULE_VAL_CMD(Fork),                                                                             // opt/set
                     PARSE_RULE_VAL_CMD(Manifest),                                                                         // opt/set
                     PARSE_RULE_VAL_CMD(Restore),                                                                          // opt/set
                 ),                                                                                                        // opt/set
@@ -10839,6 +10925,19 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
                 ),                                                                                                        // opt/set
                                                                                                                           // opt/set
                 PARSE_RULE_OPTIONAL_REQUIRED(),                                                                           // opt/set
+            ),                                                                                                            // opt/set
+                                                                                                                          // opt/set
+            PARSE_RULE_OPTIONAL_GROUP                                                                                     // opt/set
+            (                                                                                                             // opt/set
+                PARSE_RULE_FILTER_CMD                                                                                     // opt/set
+                (                                                                                                         // opt/set
+                    PARSE_RULE_VAL_CMD(Info),                                                                             // opt/set
+                ),                                                                                                        // opt/set
+                                                                                                                          // opt/set
+                PARSE_RULE_OPTIONAL_DEPEND                                                                                // opt/set
+                (                                                                                                         // opt/set
+                    PARSE_RULE_VAL_OPT(Stanza),                                                                           // opt/set
+                ),                                                                                                        // opt/set
             ),                                                                                                            // opt/set
         ),                                                                                                                // opt/set
     ),                                                                                                                    // opt/set
@@ -10875,6 +10974,44 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             ),                                                                                                           // opt/sort
         ),                                                                                                               // opt/sort
     ),                                                                                                                   // opt/sort
+    // -----------------------------------------------------------------------------------------------------------------------------
+    PARSE_RULE_OPTION                                                                                             // opt/source-repo
+    (                                                                                                             // opt/source-repo
+        PARSE_RULE_OPTION_NAME("source-repo"),                                                                    // opt/source-repo
+        PARSE_RULE_OPTION_TYPE(Integer),                                                                          // opt/source-repo
+        PARSE_RULE_OPTION_REQUIRED(false),                                                                        // opt/source-repo
+        PARSE_RULE_OPTION_SECTION(CommandLine),                                                                   // opt/source-repo
+                                                                                                                  // opt/source-repo
+        PARSE_RULE_OPTION_COMMAND_ROLE_MAIN_VALID_LIST                                                            // opt/source-repo
+        (                                                                                                         // opt/source-repo
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                       // opt/source-repo
+        ),                                                                                                        // opt/source-repo
+                                                                                                                  // opt/source-repo
+        PARSE_RULE_OPTIONAL                                                                                       // opt/source-repo
+        (                                                                                                         // opt/source-repo
+            PARSE_RULE_OPTIONAL_GROUP                                                                             // opt/source-repo
+            (                                                                                                     // opt/source-repo
+                PARSE_RULE_OPTIONAL_ALLOW_RANGE                                                                   // opt/source-repo
+                (                                                                                                 // opt/source-repo
+                    PARSE_RULE_VAL_INT(1),                                                                        // opt/source-repo
+                    PARSE_RULE_VAL_INT(256),                                                                      // opt/source-repo
+                ),                                                                                                // opt/source-repo
+            ),                                                                                                    // opt/source-repo
+        ),                                                                                                        // opt/source-repo
+    ),                                                                                                            // opt/source-repo
+    // -----------------------------------------------------------------------------------------------------------------------------
+    PARSE_RULE_OPTION                                                                                           // opt/source-stanza
+    (                                                                                                           // opt/source-stanza
+        PARSE_RULE_OPTION_NAME("source-stanza"),                                                                // opt/source-stanza
+        PARSE_RULE_OPTION_TYPE(String),                                                                         // opt/source-stanza
+        PARSE_RULE_OPTION_REQUIRED(true),                                                                       // opt/source-stanza
+        PARSE_RULE_OPTION_SECTION(CommandLine),                                                                 // opt/source-stanza
+                                                                                                                // opt/source-stanza
+        PARSE_RULE_OPTION_COMMAND_ROLE_MAIN_VALID_LIST                                                          // opt/source-stanza
+        (                                                                                                       // opt/source-stanza
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                     // opt/source-stanza
+        ),                                                                                                      // opt/source-stanza
+    ),                                                                                                          // opt/source-stanza
     // -----------------------------------------------------------------------------------------------------------------------------
     PARSE_RULE_OPTION                                                                                              // opt/spool-path
     (                                                                                                              // opt/spool-path
@@ -10963,6 +11100,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                          // opt/stanza
             PARSE_RULE_OPTION_COMMAND(Check)                                                                           // opt/stanza
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                          // opt/stanza
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                            // opt/stanza
             PARSE_RULE_OPTION_COMMAND(Info)                                                                            // opt/stanza
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                        // opt/stanza
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                         // opt/stanza
@@ -11123,6 +11261,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
                                                                                                                        // opt/target
         PARSE_RULE_OPTION_COMMAND_ROLE_MAIN_VALID_LIST                                                                 // opt/target
         (                                                                                                              // opt/target
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                            // opt/target
             PARSE_RULE_OPTION_COMMAND(Restore)                                                                         // opt/target
         ),                                                                                                             // opt/target
                                                                                                                        // opt/target
@@ -11192,6 +11331,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
                                                                                                              // opt/target-exclusive
         PARSE_RULE_OPTION_COMMAND_ROLE_MAIN_VALID_LIST                                                       // opt/target-exclusive
         (                                                                                                    // opt/target-exclusive
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                  // opt/target-exclusive
             PARSE_RULE_OPTION_COMMAND(Restore)                                                               // opt/target-exclusive
         ),                                                                                                   // opt/target-exclusive
                                                                                                              // opt/target-exclusive
@@ -11224,6 +11364,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
                                                                                                               // opt/target-timeline
         PARSE_RULE_OPTION_COMMAND_ROLE_MAIN_VALID_LIST                                                        // opt/target-timeline
         (                                                                                                     // opt/target-timeline
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                   // opt/target-timeline
             PARSE_RULE_OPTION_COMMAND(Restore)                                                                // opt/target-timeline
         ),                                                                                                    // opt/target-timeline
                                                                                                               // opt/target-timeline
@@ -11261,6 +11402,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                            // opt/tcp-keep-alive-count
             PARSE_RULE_OPTION_COMMAND(Check)                                                             // opt/tcp-keep-alive-count
             PARSE_RULE_OPTION_COMMAND(Expire)                                                            // opt/tcp-keep-alive-count
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                              // opt/tcp-keep-alive-count
             PARSE_RULE_OPTION_COMMAND(Info)                                                              // opt/tcp-keep-alive-count
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                          // opt/tcp-keep-alive-count
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                           // opt/tcp-keep-alive-count
@@ -11345,6 +11487,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                             // opt/tcp-keep-alive-idle
             PARSE_RULE_OPTION_COMMAND(Check)                                                              // opt/tcp-keep-alive-idle
             PARSE_RULE_OPTION_COMMAND(Expire)                                                             // opt/tcp-keep-alive-idle
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                               // opt/tcp-keep-alive-idle
             PARSE_RULE_OPTION_COMMAND(Info)                                                               // opt/tcp-keep-alive-idle
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                           // opt/tcp-keep-alive-idle
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                            // opt/tcp-keep-alive-idle
@@ -11429,6 +11572,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                         // opt/tcp-keep-alive-interval
             PARSE_RULE_OPTION_COMMAND(Check)                                                          // opt/tcp-keep-alive-interval
             PARSE_RULE_OPTION_COMMAND(Expire)                                                         // opt/tcp-keep-alive-interval
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                           // opt/tcp-keep-alive-interval
             PARSE_RULE_OPTION_COMMAND(Info)                                                           // opt/tcp-keep-alive-interval
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                       // opt/tcp-keep-alive-interval
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                        // opt/tcp-keep-alive-interval
@@ -11513,6 +11657,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                   // opt/tls-cipher-12
             PARSE_RULE_OPTION_COMMAND(Check)                                                                    // opt/tls-cipher-12
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                   // opt/tls-cipher-12
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                     // opt/tls-cipher-12
             PARSE_RULE_OPTION_COMMAND(Info)                                                                     // opt/tls-cipher-12
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                 // opt/tls-cipher-12
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                  // opt/tls-cipher-12
@@ -11579,6 +11724,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                   // opt/tls-cipher-13
             PARSE_RULE_OPTION_COMMAND(Check)                                                                    // opt/tls-cipher-13
             PARSE_RULE_OPTION_COMMAND(Expire)                                                                   // opt/tls-cipher-13
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                     // opt/tls-cipher-13
             PARSE_RULE_OPTION_COMMAND(Info)                                                                     // opt/tls-cipher-13
             PARSE_RULE_OPTION_COMMAND(Manifest)                                                                 // opt/tls-cipher-13
             PARSE_RULE_OPTION_COMMAND(RepoGet)                                                                  // opt/tls-cipher-13
@@ -11754,6 +11900,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
         PARSE_RULE_OPTION_COMMAND_ROLE_MAIN_VALID_LIST                                                                   // opt/type
         (                                                                                                                // opt/type
             PARSE_RULE_OPTION_COMMAND(Backup)                                                                            // opt/type
+            PARSE_RULE_OPTION_COMMAND(Fork)                                                                              // opt/type
             PARSE_RULE_OPTION_COMMAND(Info)                                                                              // opt/type
             PARSE_RULE_OPTION_COMMAND(Restore)                                                                           // opt/type
         ),                                                                                                               // opt/type
@@ -11784,23 +11931,7 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
             (                                                                                                            // opt/type
                 PARSE_RULE_FILTER_CMD                                                                                    // opt/type
                 (                                                                                                        // opt/type
-                    PARSE_RULE_VAL_CMD(Info),                                                                            // opt/type
-                ),                                                                                                       // opt/type
-                                                                                                                         // opt/type
-                PARSE_RULE_OPTIONAL_ALLOW_LIST                                                                           // opt/type
-                (                                                                                                        // opt/type
-                    PARSE_RULE_VAL_STRID(full),                                                                          // opt/type
-                    PARSE_RULE_VAL_STRID(diff),                                                                          // opt/type
-                    PARSE_RULE_VAL_STRID(incr),                                                                          // opt/type
-                ),                                                                                                       // opt/type
-                                                                                                                         // opt/type
-                PARSE_RULE_OPTIONAL_NOT_REQUIRED(),                                                                      // opt/type
-            ),                                                                                                           // opt/type
-                                                                                                                         // opt/type
-            PARSE_RULE_OPTIONAL_GROUP                                                                                    // opt/type
-            (                                                                                                            // opt/type
-                PARSE_RULE_FILTER_CMD                                                                                    // opt/type
-                (                                                                                                        // opt/type
+                    PARSE_RULE_VAL_CMD(Fork),                                                                            // opt/type
                     PARSE_RULE_VAL_CMD(Restore),                                                                         // opt/type
                 ),                                                                                                       // opt/type
                                                                                                                          // opt/type
@@ -11823,6 +11954,23 @@ static const ParseRuleOption parseRuleOption[CFG_OPTION_TOTAL] =
                 (                                                                                                        // opt/type
                     PARSE_RULE_VAL_STRID(default),                                                                       // opt/type
                 ),                                                                                                       // opt/type
+            ),                                                                                                           // opt/type
+                                                                                                                         // opt/type
+            PARSE_RULE_OPTIONAL_GROUP                                                                                    // opt/type
+            (                                                                                                            // opt/type
+                PARSE_RULE_FILTER_CMD                                                                                    // opt/type
+                (                                                                                                        // opt/type
+                    PARSE_RULE_VAL_CMD(Info),                                                                            // opt/type
+                ),                                                                                                       // opt/type
+                                                                                                                         // opt/type
+                PARSE_RULE_OPTIONAL_ALLOW_LIST                                                                           // opt/type
+                (                                                                                                        // opt/type
+                    PARSE_RULE_VAL_STRID(full),                                                                          // opt/type
+                    PARSE_RULE_VAL_STRID(diff),                                                                          // opt/type
+                    PARSE_RULE_VAL_STRID(incr),                                                                          // opt/type
+                ),                                                                                                       // opt/type
+                                                                                                                         // opt/type
+                PARSE_RULE_OPTIONAL_NOT_REQUIRED(),                                                                      // opt/type
             ),                                                                                                           // opt/type
         ),                                                                                                               // opt/type
     ),                                                                                                                   // opt/type
@@ -12230,6 +12378,8 @@ static const uint8_t optionResolveOrder[] =
     cfgOptSckKeepAlive,                                                                                         // opt-resolve-order
     cfgOptSet,                                                                                                  // opt-resolve-order
     cfgOptSort,                                                                                                 // opt-resolve-order
+    cfgOptSourceRepo,                                                                                           // opt-resolve-order
+    cfgOptSourceStanza,                                                                                         // opt-resolve-order
     cfgOptSpoolPath,                                                                                            // opt-resolve-order
     cfgOptStartFast,                                                                                            // opt-resolve-order
     cfgOptStopAuto,                                                                                             // opt-resolve-order

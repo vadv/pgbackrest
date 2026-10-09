@@ -21,7 +21,8 @@ restorePathValidate(void)
 
         // If the restore will be destructive attempt to verify that PGDATA looks like a valid PostgreSQL directory
         if ((cfgOptionBool(cfgOptDelta) || cfgOptionBool(cfgOptForce)) &&
-            !storageExistsP(storagePg(), PG_FILE_PGVERSION_STR) && !storageExistsP(storagePg(), BACKUP_MANIFEST_FILE_STR))
+            !storageExistsP(storagePg(), PG_FILE_PGVERSION_STR) && !storageExistsP(storagePg(), BACKUP_MANIFEST_FILE_STR) &&
+            !storageExistsP(storagePg(), STRDEF(RESTORE_FORK_FILE)))
         {
             LOG_WARN_FMT(
                 "--delta or --force specified but unable to find '" PG_FILE_PGVERSION "' or '" BACKUP_MANIFEST_FILE "' in '%s' to"

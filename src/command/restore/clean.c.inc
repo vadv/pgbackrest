@@ -398,6 +398,7 @@ restoreCleanBuild(const Manifest *const manifest, const String *const rootReplac
 
             // Ignore backup.manifest while cleaning since it may exist from an prior incomplete restore
             strLstAdd(cleanData->fileIgnore, BACKUP_MANIFEST_FILE_STR);
+            strLstAdd(cleanData->fileIgnore, STRDEF(RESTORE_FORK_FILE));
 
             // Also ignore recovery files when recovery type = preserve
             if (cfgOptionSeq(cfgOptType) == CFGOPTVAL_RESTORE_TYPE_PRESERVE)

@@ -97,10 +97,12 @@ restoreBackupSet(void)
             storageRepoIdx(repoIdx);
 
             const InfoBackup *infoBackup = NULL;
+            const InfoFork *fork = NULL;
 
             // Attempt to load backup.info
             TRY_BEGIN()
             {
+                fork = forkInfoLoad(repoIdx);
                 infoBackup = infoBackupLoadFile(storageRepoIdx(repoIdx), INFO_BACKUP_PATH_FILE_STR, cfgCipherSpecMainIdx(repoIdx));
             }
             CATCH_ANY()
@@ -112,6 +114,15 @@ restoreBackupSet(void)
             // If unable to load the backup info file, then move on to next repo
             if (infoBackup == NULL)
                 continue;
+
+            if (fork != NULL && infoForkData(fork)->ownTimeline == 0)
+            {
+                const InfoForkData *const data = infoForkData(fork);
+                restoreForkTarget(data);
+                CHECK(BackupSetInvalidError, infoBackupLabelExists(infoBackup, data->backupLabel), "fork backup is missing");
+                result = restoreBackupData(data->backupLabel, repoIdx, infoBackupCipherSpec(infoBackup));
+                break;
+            }
 
             if (infoBackupDataTotal(infoBackup) == 0)
             {

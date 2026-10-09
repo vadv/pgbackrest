@@ -91,6 +91,7 @@ static struct HrnHostLocal
     bool archiveAsync;                                              // Async archiving enabled?
     bool nonVersionSpecific;                                        // Run non version-specific tests?
     bool versioning;                                                // Is versioning enabled in the repo storage?
+    bool repoDirect;                                                // Access repositories directly from pg hosts?
 
     List *hostList;                                                 // List of hosts
 } hrnHostLocal;
@@ -272,6 +273,7 @@ hrnHostExecBr(HrnHost *const this, const char *const command, const HrnHostExecB
     FUNCTION_HARNESS_BEGIN();
         FUNCTION_HARNESS_PARAM(HRN_HOST, this);
         FUNCTION_HARNESS_PARAM(STRINGZ, command);
+        FUNCTION_HARNESS_PARAM(STRINGZ, param.stanza);
         FUNCTION_HARNESS_PARAM(STRINGZ, param.user);
         FUNCTION_HARNESS_PARAM(STRINGZ, param.option);
         FUNCTION_HARNESS_PARAM(STRINGZ, param.param);
@@ -286,7 +288,7 @@ hrnHostExecBr(HrnHost *const this, const char *const command, const HrnHostExecB
     MEM_CONTEXT_TEMP_BEGIN()
     {
         const String *const user = param.user == NULL ? NULL : STR(param.user);
-        String *const commandStr = strCatFmt(strNew(), "pgbackrest --stanza=" HRN_STANZA);
+        String *const commandStr = strCatFmt(strNew(), "pgbackrest --stanza=%s", param.stanza == NULL ? HRN_STANZA : param.stanza);
 
         if (param.option != NULL)
             strCatFmt(commandStr, " %s", param.option);
@@ -401,7 +403,7 @@ hrnHostPgCreate(HrnHost *const this)
                 "echo 'host\treplication\treplicator\tpg2\t\t\ttrust' >> '%s/pg_hba.conf'", strZ(hrnHostPgDataPath(this))));
 
         // Start Pg
-        hrnHostPgStart(this);
+        hrnHostPgStartP(this);
 
         // Add replication user
         hrnHostSqlExec(this, STRDEF("create user replicator replication"));
@@ -413,10 +415,11 @@ hrnHostPgCreate(HrnHost *const this)
 
 /**********************************************************************************************************************************/
 void
-hrnHostPgStart(HrnHost *const this)
+hrnHostPgStart(HrnHost *const this, const HrnHostPgStartParam param)
 {
     FUNCTION_HARNESS_BEGIN();
         FUNCTION_HARNESS_PARAM(HRN_HOST, this);
+        FUNCTION_HARNESS_PARAM(BOOL, param.noConfig);
     FUNCTION_HARNESS_END();
 
     ASSERT(this != NULL);
@@ -424,17 +427,40 @@ hrnHostPgStart(HrnHost *const this)
 
     MEM_CONTEXT_TEMP_BEGIN()
     {
-        // Create postgresql.conf
-        hrnHostPgConf(this);
+        if (!param.noConfig)
+            hrnHostPgConf(this);
 
         // Start Pg
         const String *const command = strNewFmt(
-            "%s/pg_ctl start -D '%s' -l '%s' -s -w", strZ(hrnHostPgBinPath(this)), strZ(hrnHostPgDataPath(this)),
-            strZ(hrnHostPgLogFile(this)));
+            "%s/pg_ctl start -D '%s' -l '%s' -s -w%s", strZ(hrnHostPgBinPath(this)), strZ(hrnHostPgDataPath(this)),
+            strZ(hrnHostPgLogFile(this)), param.noConfig ? zNewFmt(" -o \"-k '%s'\"", strZ(hrnHostPgPath(this))) : "");
 
         hrnHostExecP(this, command);
     }
     MEM_CONTEXT_TEMP_END();
+
+    FUNCTION_HARNESS_RETURN_VOID();
+}
+
+/**********************************************************************************************************************************/
+void
+hrnHostPgDataPathSet(HrnHost *const this, const String *const path)
+{
+    FUNCTION_HARNESS_BEGIN();
+        FUNCTION_HARNESS_PARAM(HRN_HOST, this);
+        FUNCTION_HARNESS_PARAM(STRING, path);
+    FUNCTION_HARNESS_END();
+
+    ASSERT(this != NULL && hrnHostIsPg(this));
+    ASSERT(path != NULL);
+
+    MEM_CONTEXT_OBJ_BEGIN(this)
+    {
+        this->pub.pgDataPath = strDup(path);
+        objFree(this->pub.pgStorage);
+        this->pub.pgStorage = storagePosixNewP(path, .write = true);
+    }
+    MEM_CONTEXT_OBJ_END();
 
     FUNCTION_HARNESS_RETURN_VOID();
 }
@@ -692,7 +718,7 @@ hrnHostConfig(HrnHost *const this)
         }
 
         // Repo options
-        if (hrnHostIsRepo(this))
+        if (hrnHostIsRepo(this) || hrnHostLocal.repoDirect)
         {
             objFree(this->pub.repo1Storage);
             this->pub.repo1Storage = NULL;
@@ -874,6 +900,7 @@ hrnHostConfig(HrnHost *const this)
 
         // Stanza options
         strCatZ(config, "\n[" HRN_STANZA "]\n");
+        const size_t stanzaBegin = strSize(config);
 
         switch (hrnHostId(this))
         {
@@ -890,9 +917,9 @@ hrnHostConfig(HrnHost *const this)
                 strCatFmt(config, "pg1-path=%s\n", strZ(hrnHostPgDataPath(this)));
                 strCatFmt(config, "pg1-socket-path=%s/pg2/pg\n", testPath());
 
-                if (hrnHostLocal.repoHost == HRN_HOST_PG2)
+                if (hrnHostLocal.repoHost == HRN_HOST_PG2 && !hrnHostLocal.repoDirect)
                 {
-                    strCatFmt(config, "pg2-path=%s/pg1/pg/data\n", testPath());
+                    strCatFmt(config, "pg2-path=%s\n", strZ(hrnHostPgDataPath(hrnHostPg1())));
                     strCatZ(config, "pg2-host=pg1\n");
                     strCatFmt(config, "pg2-host-user=%s\n", strZ(hrnHostUser(this)));
                     hrnHostConfigTls(this, config, "pg2");
@@ -905,18 +932,24 @@ hrnHostConfig(HrnHost *const this)
             {
                 ASSERT(hrnHostId(this) == HRN_HOST_REPO);
 
-                strCatFmt(config, "pg1-path=%s/pg1/pg/data\n", testPath());
+                strCatFmt(config, "pg1-path=%s\n", strZ(hrnHostPgDataPath(hrnHostPg1())));
                 strCatZ(config, "pg1-host=pg1\n");
                 strCatFmt(config, "pg1-host-user=%s\n", strZ(hrnHostUser(this)));
                 hrnHostConfigTls(this, config, "pg1");
 
-                strCatFmt(config, "pg2-path=%s/pg2/pg/data\n", testPath());
+                strCatFmt(config, "pg2-path=%s\n", strZ(hrnHostPgDataPath(hrnHostPg2())));
                 strCatZ(config, "pg2-host=pg2\n");
                 strCatFmt(config, "pg2-host-user=%s\n", strZ(hrnHostUser(this)));
                 hrnHostConfigTls(this, config, "pg2");
 
                 break;
             }
+        }
+
+        if (hrnHostLocal.stanza != NULL)
+        {
+            const String *const stanzaConfig = strSub(config, stanzaBegin);
+            strCatFmt(config, "\n[%s]\n%s", strZ(hrnHostLocal.stanza), strZ(stanzaConfig));
         }
 
         storagePutP(
@@ -995,12 +1028,13 @@ hrnHostPgClient(HrnHost *const this)
 
     if (this->pgClient == NULL)
     {
-        MEM_CONTEXT_OBJ_BEGIN(this)
+        MEM_CONTEXT_TEMP_BEGIN()
         {
-            this->pgClient = pgClientNew(hrnHostPgPath(this), 5432, STRDEF("postgres"), hrnHostUser(this), ioTimeoutMs());
-            pgClientOpen(this->pgClient);
+            PgClient *const client = pgClientNew(hrnHostPgPath(this), 5432, STRDEF("postgres"), hrnHostUser(this), ioTimeoutMs());
+            pgClientOpen(client);
+            this->pgClient = pgClientMove(client, objMemContext(this));
         }
-        MEM_CONTEXT_OBJ_END();
+        MEM_CONTEXT_TEMP_END();
     }
 
     FUNCTION_HARNESS_RETURN(PG_CLIENT, this->pgClient);
@@ -1102,11 +1136,21 @@ hrnHostConfigUpdate(const HrnHostConfigUpdateParam param)
 {
     FUNCTION_HARNESS_BEGIN();
         FUNCTION_HARNESS_PARAM(VARIANT, param.archiveAsync);
+        FUNCTION_HARNESS_PARAM(STRING, param.stanza);
     FUNCTION_HARNESS_END();
 
     // Update config
     if (param.archiveAsync != NULL)
         hrnHostLocal.archiveAsync = varBool(param.archiveAsync);
+
+    if (param.stanza != NULL)
+    {
+        MEM_CONTEXT_BEGIN(hrnHostLocal.memContext)
+        {
+            hrnHostLocal.stanza = strDup(param.stanza);
+        }
+        MEM_CONTEXT_END();
+    }
 
     // Write pgBackRest configuration for hosts
     hrnHostConfig(hrnHostPg1());
@@ -1138,11 +1182,22 @@ hrnHostBuildRun(const int line, const StringId id, const String *const image)
         const bool isRepo = id == hrnHostLocal.repoHost;
         const String *const container = strNewFmt("test-%u-%s", testIdx(), strZ(name));
         const String *const dataPath = strNewFmt("%s/%s", testPath(), strZ(name));
-        String *const option = strNewFmt(
-            "-v '%s/cfg:/etc/pgbackrest:ro' -v '%s:/usr/bin/pgbackrest:ro' -v '%s:%s:ro'", strZ(dataPath), testProjectExe(),
-            hrnPathRepo(), hrnPathRepo());
+        String *const option = strCatFmt(
+            strNew(), "-v '%s/cfg:/etc/pgbackrest:ro' -v '%s:/usr/bin/pgbackrest:ro' -v '%s:%s:ro'", strZ(dataPath),
+            testProjectExe(), hrnPathRepo(), hrnPathRepo());
         const String *param = NULL;
         const String *entryPoint = NULL;
+
+        if (hrnHostLocal.repoDirect && !isRepo)
+        {
+            for (unsigned int repoIdx = 0; repoIdx < hrnHostLocal.repoTotal; repoIdx++)
+            {
+                const String *const repoPath = strNewFmt(
+                    "%s/%s/repo%u", testPath(), zNewStrId(hrnHostLocal.repoHost), repoIdx + 1);
+                storagePathCreateP(storagePosixNewP(STR(testPath()), .write = true), repoPath);
+                strCatFmt(option, " -v '%s:%s'", strZ(repoPath), strZ(repoPath));
+            }
+        }
 
         if (hrnHostLocal.tls)
         {
@@ -1237,6 +1292,7 @@ hrnHostBuild(const int line, const HrnHostTestDefine *const testMatrix, const si
         hrnHostLocal.tls = testDef->tls;
         hrnHostLocal.bundle = testDef->bnd;
         hrnHostLocal.blockIncr = testDef->bi;
+        hrnHostLocal.repoDirect = testDef->repoDirect;
         hrnHostLocal.nonVersionSpecific = strcmp(testDef->pg, testMatrix[testMatrixSize - 1].pg) == 0;
     }
     MEM_CONTEXT_END();
@@ -1257,6 +1313,21 @@ hrnHostBuild(const int line, const HrnHostTestDefine *const testMatrix, const si
 
     // Create repo host if the destination is repo
     HrnHost *const repo = hrnHostLocal.repoHost == HRN_HOST_REPO ? hrnHostBuildRun(line, HRN_HOST_REPO, image) : pg2;
+
+    if (hrnHostLocal.repoDirect)
+    {
+        HrnHost *const pgList[] = {hrnHostPg1(), pg2};
+
+        for (unsigned int pgIdx = 0; pgIdx < LENGTH_OF(pgList); pgIdx++)
+        {
+            MEM_CONTEXT_OBJ_BEGIN(pgList[pgIdx])
+            {
+                pgList[pgIdx]->pub.repo1Path = strDup(hrnHostRepo1Path(repo));
+                pgList[pgIdx]->pub.repo2Path = strDup(hrnHostRepo2Path(repo));
+            }
+            MEM_CONTEXT_OBJ_END();
+        }
+    }
 
     MEM_CONTEXT_TEMP_BEGIN()
     {
@@ -1326,14 +1397,20 @@ hrnHostBuild(const int line, const HrnHostTestDefine *const testMatrix, const si
 
                     HrnHost *const s3 = hrnHostGet(HRN_HOST_S3);
 
-                    hrnHostExecP(
-                        repo, strNewFmt("echo \"%s\t" HRN_HOST_S3_ENDPOINT "\" >> /etc/hosts", strZ(hrnHostIp(s3))),
-                        .user = STRDEF("root"));
-                    hrnHostExecP(
-                        repo,
-                        strNewFmt(
-                            "echo \"%s\t" HRN_HOST_S3_BUCKET "." HRN_HOST_S3_ENDPOINT "\" >> /etc/hosts", strZ(hrnHostIp(s3))),
-                        .user = STRDEF("root"));
+                    for (unsigned int hostIdx = 0; hostIdx < lstSize(hrnHostLocal.hostList); hostIdx++)
+                    {
+                        HrnHost *const host = *(HrnHost **)lstGet(hrnHostLocal.hostList, hostIdx);
+
+                        if (hrnHostIsRepo(host) || (hrnHostLocal.repoDirect && hrnHostIsPg(host)))
+                        {
+                            hrnHostExecP(
+                                host,
+                                strNewFmt(
+                                    "echo \"%s\t" HRN_HOST_S3_ENDPOINT " " HRN_HOST_S3_BUCKET "." HRN_HOST_S3_ENDPOINT
+                                    "\" >> /etc/hosts", strZ(hrnHostIp(s3))),
+                                .user = STRDEF("root"));
+                        }
+                    }
 
                     break;
                 }

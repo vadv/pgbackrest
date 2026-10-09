@@ -15,6 +15,7 @@ Functions
 typedef struct ArchiveGetFile
 {
     const String *file;                                             // File in the repo (with path, checksum, ext, etc.)
+    const String *archivePath;                                      // Explicit path relative to the repository root
     unsigned int repoIdx;                                           // Repo idx
     const String *archiveId;                                        // Repo archive id
     const CipherSpecMap *cipherSpecArchive;                         // Repo archive cipher keys

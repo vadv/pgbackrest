@@ -5,15 +5,19 @@ Archive Push File
 
 #include "command/archive/common.h"
 #include "command/archive/find.h"
+#include "command/archive/fork.h"
 #include "command/archive/push/file.h"
 #include "command/control/common.h"
 #include "common/crypto/hash.h"
 #include "common/debug.h"
 #include "common/format/cipherBlockFormat.h"
+#include "common/io/bufferRead.h"
 #include "common/io/filter/group.h"
 #include "common/io/io.h"
 #include "common/log.h"
+#include "common/regExp.h"
 #include "config/config.h"
+#include "info/infoArchive.h"
 #include "postgres/interface.h"
 #include "storage/helper.h"
 
@@ -128,6 +132,7 @@ archivePushFile(
 
         // Is this a WAL segment?
         const bool isSegment = walIsSegment(archiveFile);
+        const Buffer *history = NULL;
 
         // If this is a segment compare archive version and systemId to the WAL header
         if (headerCheck && isSegment)
@@ -231,12 +236,51 @@ archivePushFile(
             // Append the checksum to the archive destination
             strCatFmt(archiveDestination, "-%s", strZ(walSegmentChecksum));
         }
+        // Keep timeline history unchanged across retries. Compare decrypted content with the current and prior archive keys.
+        else if (regExpMatchOne(STRDEF("^[0-9A-F]{8}\\.history$"), archiveFile))
+        {
+            history = storageGetP(storageNewReadP(storageLocal(), walSource));
+            const ArchiveFork *const fork = archiveForkLoad();
+
+            destinationCopyAny = false;
+
+            for (unsigned int repoListIdx = 0; repoListIdx < lstSize(repoList); repoListIdx++)
+            {
+                const ArchivePushFileRepoData *const repoData = lstGet(repoList, repoListIdx);
+                const String *const path = strNewFmt(
+                    STORAGE_REPO_ARCHIVE "/%s/%s", strZ(repoData->archiveId), strZ(archiveFile));
+
+                if (storageExistsP(storageRepoIdx(repoData->repoIdx), path))
+                {
+                    const InfoArchive *const archive = infoArchiveLoadFile(
+                        storageRepoIdx(repoData->repoIdx), INFO_ARCHIVE_PATH_FILE_STR, cfgCipherSpecMainIdx(repoData->repoIdx));
+                    StorageRead *const read = storageNewReadP(storageRepoIdx(repoData->repoIdx), path);
+                    cipherBlockFormatFilterGroupReadAddMap(
+                        ioReadFilterGroup(storageReadIo(read)), infoArchiveCipherSpecMap(archive));
+
+                    if (!bufEq(history, storageGetP(read)))
+                    {
+                        THROW_FMT(
+                            ArchiveDuplicateError, "timeline history '%s' already exists in the %s archive with different content",
+                            strZ(archiveFile), cfgOptionGroupName(cfgOptGrpRepo, repoData->repoIdx));
+                    }
+
+                    destinationCopy[repoListIdx] = false;
+                }
+                else
+                    destinationCopyAny = true;
+            }
+
+            if (fork != NULL)
+                archiveForkHistory(fork, archiveFile, strNewBuf(history));
+        }
 
         // Copy the file if one or more repos require it
         if (destinationCopyAny)
         {
             // Source file is read once and copied to all repos
-            StorageRead *const source = storageNewReadP(storageLocal(), walSource);
+            IoRead *const source = history == NULL ?
+                                       storageReadIo(storageNewReadP(storageLocal(), walSource)) : ioBufferReadNew(history);
 
             // Is the file compressible during the copy?
             bool compressible = true;
@@ -245,7 +289,7 @@ archivePushFile(
             if (isSegment && compressType != compressTypeNone)
             {
                 compressExtCat(archiveDestination, compressType);
-                ioFilterGroupAdd(ioReadFilterGroup(storageReadIo(source)), compressFilterP(compressType, compressLevel));
+                ioFilterGroupAdd(ioReadFilterGroup(source), compressFilterP(compressType, compressLevel));
                 compressible = false;
             }
 
@@ -273,7 +317,7 @@ archivePushFile(
             }
 
             // Open source file
-            ioReadOpen(storageReadIo(source));
+            ioReadOpen(source);
 
             // Open the destination files now that we know the source file exists and is readable
             for (unsigned int repoListIdx = 0; repoListIdx < lstSize(repoList); repoListIdx++)
@@ -293,7 +337,7 @@ archivePushFile(
             do
             {
                 // Read from source
-                ioRead(storageReadIo(source), read);
+                ioRead(source, read);
 
                 // Write to each destination
                 for (unsigned int repoListIdx = 0; repoListIdx < lstSize(repoList); repoListIdx++)
@@ -310,10 +354,10 @@ archivePushFile(
                 // Clear buffer
                 bufUsedZero(read);
             }
-            while (!ioReadEof(storageReadIo(source)));
+            while (!ioReadEof(source));
 
             // Close the source and destination files
-            ioReadClose(storageReadIo(source));
+            ioReadClose(source);
 
             for (unsigned int repoListIdx = 0; repoListIdx < lstSize(repoList); repoListIdx++)
             {

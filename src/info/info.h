@@ -43,8 +43,7 @@ Constructors
 FN_EXTERN Info *infoNew(unsigned int format, const CipherSpec *cipherSpecSub);
 
 // Create new object and load contents from a file. Decryption is added by the caller since which filter a file needs depends on
-// whether it begins with a header. The cipher spec the file is read with supplies the type for the cipher spec built from the pass
-// stored in it.
+// whether it begins with a header. Stored keys use the file's cipher type, or AES-256-CBC when the file is unencrypted.
 FN_EXTERN Info *infoNewLoad(
     IoRead *read, const CipherSpec *cipherSpec, InfoLoadNewCallback *callbackFunction, void *callbackData);
 

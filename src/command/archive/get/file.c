@@ -73,7 +73,7 @@ archiveGetFile(
                 // Copy the file
                 storageCopyP(
                     storageNewReadP(
-                        storageRepoIdx(actual->repoIdx), strNewFmt(STORAGE_REPO_ARCHIVE "/%s", strZ(actual->file)),
+                        storageRepoIdx(actual->repoIdx), actual->archivePath,
                         .compressible = compressible),
                     destination);
             }

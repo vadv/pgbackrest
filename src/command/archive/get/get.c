@@ -10,10 +10,12 @@ Archive Get Command
 #include <unistd.h>
 
 #include "command/archive/common.h"
+#include "command/archive/fork.h"
 #include "command/archive/get/file.h"
 #include "command/archive/get/get.h"
 #include "command/archive/get/protocol.h"
 #include "command/command.h"
+#include "command/fork/common.h"
 #include "command/lock.h"
 #include "common/debug.h"
 #include "common/log.h"
@@ -88,6 +90,7 @@ typedef struct ArchiveGetFindCachePath
 typedef struct ArchiveGetFindCacheArchive
 {
     const String *archiveId;                                        // ArchiveId in the repo
+    const String *archivePath;                                      // Explicit archive directory relative to the repository root
     List *pathList;                                                 // List of paths cached for archiveId
 } ArchiveGetFindCacheArchive;
 
@@ -146,18 +149,17 @@ archiveGetFind(
                 for (unsigned int archiveCacheIdx = 0; archiveCacheIdx < lstSize(cacheRepo->archiveList); archiveCacheIdx++)
                 {
                     const ArchiveGetFindCacheArchive *const cacheArchive = lstGet(cacheRepo->archiveList, archiveCacheIdx);
+                    StringList *fileList;
 
                     // If a WAL segment then search among the possible file names
                     if (isSegment)
                     {
-                        StringList *segmentList;
-
                         // If a single file is requested then optimize by adding a restrictive expression to reduce bandwidth
                         if (single)
                         {
-                            segmentList = storageListP(
+                            fileList = storageListP(
                                 storageRepoIdx(cacheRepo->repoIdx),
-                                strNewFmt(STORAGE_REPO_ARCHIVE "/%s/%s", strZ(cacheArchive->archiveId), strZ(path)),
+                                strNewFmt("%s/%s", strZ(cacheArchive->archivePath), strZ(path)),
                                 .expression = strNewFmt(
                                     "^%s%s-[0-f]{40}" COMPRESS_TYPE_REGEXP "{0,1}$", strZ(strSubN(archiveFileRequest, 0, 24)),
                                     walIsPartial(archiveFileRequest) ? WAL_SEGMENT_PARTIAL_EXT : ""));
@@ -180,7 +182,7 @@ archiveGetFind(
                                         .path = strDup(path),
                                         .fileList = storageListP(
                                             storageRepoIdx(cacheRepo->repoIdx),
-                                            strNewFmt(STORAGE_REPO_ARCHIVE "/%s/%s", strZ(cacheArchive->archiveId), strZ(path)),
+                                            strNewFmt("%s/%s", strZ(cacheArchive->archivePath), strZ(path)),
                                             .expression = strNewFmt(
                                                 "^%s[0-F]{8}-[0-f]{40}" COMPRESS_TYPE_REGEXP "{0,1}$", strZ(path))),
                                     };
@@ -191,46 +193,40 @@ archiveGetFind(
                             }
 
                             // Get a list of all WAL segments that match
-                            segmentList = strLstNew();
+                            fileList = strLstNew();
 
                             for (unsigned int fileIdx = 0; fileIdx < strLstSize(cachePath->fileList); fileIdx++)
                             {
                                 if (strBeginsWith(strLstGet(cachePath->fileList, fileIdx), archiveFileRequest))
-                                    strLstAdd(segmentList, strLstGet(cachePath->fileList, fileIdx));
+                                    strLstAdd(fileList, strLstGet(cachePath->fileList, fileIdx));
                             }
-                        }
-
-                        // Add segments to match list
-                        for (unsigned int segmentIdx = 0; segmentIdx < strLstSize(segmentList); segmentIdx++)
-                        {
-                            MEM_CONTEXT_BEGIN(lstMemContext(getCheckResult->archiveFileMapList))
-                            {
-                                const ArchiveGetFile archiveGetFile =
-                                {
-                                    .file = strNewFmt(
-                                        "%s/%s/%s", strZ(cacheArchive->archiveId), strZ(path),
-                                        strZ(strLstGet(segmentList, segmentIdx))),
-                                    .repoIdx = cacheRepo->repoIdx,
-                                    .archiveId = cacheArchive->archiveId,
-                                    .cipherSpecArchive = cacheRepo->cipherSpecArchive,
-                                };
-
-                                lstAdd(matchList, &archiveGetFile);
-                            }
-                            MEM_CONTEXT_END();
                         }
                     }
-                    // Else if not a WAL segment, see if it exists in the archiveId path
-                    else if (
-                        storageExistsP(
-                            storageRepoIdx(cacheRepo->repoIdx),
-                            strNewFmt(STORAGE_REPO_ARCHIVE "/%s/%s", strZ(cacheArchive->archiveId), strZ(archiveFileRequest))))
+                    // Else check the exact metadata path
+                    else
                     {
+                        fileList = strLstNew();
+
+                        if (storageExistsP(
+                                storageRepoIdx(cacheRepo->repoIdx),
+                                strNewFmt("%s/%s", strZ(cacheArchive->archivePath), strZ(archiveFileRequest))))
+                        {
+                            strLstAdd(fileList, archiveFileRequest);
+                        }
+                    }
+
+                    for (unsigned int fileIdx = 0; fileIdx < strLstSize(fileList); fileIdx++)
+                    {
+                        const String *const file =
+                            isSegment ? strNewFmt("%s/%s", strZ(path), strZ(strLstGet(fileList, fileIdx))) :
+                                strLstGet(fileList, fileIdx);
+
                         MEM_CONTEXT_BEGIN(lstMemContext(getCheckResult->archiveFileMapList))
                         {
                             const ArchiveGetFile archiveGetFile =
                             {
-                                .file = strNewFmt("%s/%s", strZ(cacheArchive->archiveId), strZ(archiveFileRequest)),
+                                .file = strNewFmt("%s/%s", strZ(cacheArchive->archiveId), strZ(file)),
+                                .archivePath = strNewFmt("%s/%s", strZ(cacheArchive->archivePath), strZ(file)),
                                 .repoIdx = cacheRepo->repoIdx,
                                 .archiveId = cacheArchive->archiveId,
                                 .cipherSpecArchive = cacheRepo->cipherSpecArchive,
@@ -280,7 +276,9 @@ archiveGetFind(
                 StringList *const hashList = strLstNew();
 
                 for (unsigned int matchIdx = 0; matchIdx < lstSize(matchList); matchIdx++)
-                    strLstAddIfMissing(hashList, strSubN(((ArchiveGetFile *)lstGet(matchList, matchIdx))->file, 25, 40));
+                    strLstAddIfMissing(
+                        hashList, strSubN(strBase(((ArchiveGetFile *)lstGet(matchList, matchIdx))->file),
+                                          strSize(archiveFileRequest) + 1, 40));
 
                 // If there is more than one unique hash then there are duplicates
                 if (strLstSize(hashList) > 1)
@@ -376,9 +374,21 @@ archiveGetCheck(const StringList *const archiveRequestList)
     {
         // List of warnings
         StringList *const warnList = strLstNew();
+        const ArchiveFork *const fork = archiveForkLoad();
 
         // Get pg_control info. Error if the invalid checkpoint written by restore is detected and backup_label is not present.
         const PgControl controlInfo = pgControlFromFile(storagePg(), cfgOptionStrNull(cfgOptPgVersionForce));
+
+        if (fork != NULL)
+        {
+            const InfoForkData *const data = infoForkData(fork->info);
+
+            if (data->pgVersion != controlInfo.version || data->systemId != controlInfo.systemId ||
+                data->walSegmentSize != controlInfo.walSegmentSize)
+            {
+                THROW(ArchiveMismatchError, "fork PostgreSQL identity or WAL segment size does not match pg_control");
+            }
+        }
 
         if (controlInfo.checkpoint == PG_CONTROL_CHECKPOINT_INVALID && !storageExistsP(storagePg(), STRDEF(PG_FILE_BACKUPLABEL)))
         {
@@ -393,6 +403,9 @@ archiveGetCheck(const StringList *const archiveRequestList)
 
         for (unsigned int repoIdx = 0; repoIdx < cfgOptionGroupIdxTotal(cfgOptGrpRepo); repoIdx++)
         {
+            if (fork != NULL && repoIdx != fork->repoIdx)
+                continue;
+
             // If a repo was specified then skip all other repos
             if (cfgOptionTest(cfgOptRepo) && cfgOptionUInt(cfgOptRepo) != cfgOptionGroupIdxToKey(cfgOptGrpRepo, repoIdx))
                 continue;
@@ -456,6 +469,7 @@ archiveGetCheck(const StringList *const archiveRequestList)
                             MEM_CONTEXT_BEGIN(lstMemContext(result.archiveFileMapList))
                             {
                                 cacheArchive.archiveId = strDup(archiveId);
+                                cacheArchive.archivePath = strNewFmt(STORAGE_REPO_ARCHIVE "/%s", strZ(archiveId));
                             }
                             MEM_CONTEXT_END();
 
@@ -509,14 +523,77 @@ archiveGetCheck(const StringList *const archiveRequestList)
             MEM_CONTEXT_END();
 
             // Find files in the list
+            List *parentCache = NULL;
+
             for (unsigned int archiveRequestIdx = 0; archiveRequestIdx < strLstSize(archiveRequestList); archiveRequestIdx++)
             {
-                if (!archiveGetFind(
-                        strLstGet(archiveRequestList, archiveRequestIdx), &result, cacheRepoList, warnList,
-                        strLstSize(archiveRequestList) == 1))
+                const String *const request = strLstGet(archiveRequestList, archiveRequestIdx);
+
+                // Check timeline boundaries before lookup to exclude stale files in the fork repository.
+                if (fork != NULL && !archiveForkWalAllowed(fork->info, request, false))
+                    break;
+
+                if (archiveGetFind(request, &result, cacheRepoList, warnList, strLstSize(archiveRequestList) == 1))
+                    continue;
+
+                // Check the source repository only for shared WAL missing from the fork repository.
+                if (fork == NULL || result.errorType != NULL ||
+                    !archiveForkWalAllowed(fork->info, request, true))
                 {
                     break;
                 }
+
+                if (parentCache == NULL)
+                {
+                    const InfoForkData *const forkData = infoForkData(fork->info);
+                    const InfoArchive *const sourceInfo = infoArchiveLoadFile(
+                        storageRepoIdx(fork->sourceRepoIdx),
+                        forkSourcePath(forkData->sourceStanza, STORAGE_PATH_ARCHIVE, STRDEF(INFO_ARCHIVE_FILE)),
+                        cfgCipherSpecMainIdx(fork->sourceRepoIdx));
+                    bool sourceMatch = false;
+
+                    for (unsigned int pgIdx = 0; pgIdx < infoPgDataTotal(infoArchivePg(sourceInfo)); pgIdx++)
+                    {
+                        const InfoPgData pg = infoPgData(infoArchivePg(sourceInfo), pgIdx);
+
+                        if (strEq(infoPgArchiveId(infoArchivePg(sourceInfo), pgIdx), forkData->sourceArchiveId) &&
+                            pg.version == controlInfo.version && pg.systemId == controlInfo.systemId)
+                        {
+                            sourceMatch = true;
+                            break;
+                        }
+                    }
+
+                    if (!sourceMatch)
+                        THROW(ArchiveMismatchError, "fork source archive identity does not match PostgreSQL");
+
+                    ArchiveGetFindCacheArchive archive =
+                    {
+                        .pathList = lstNewP(sizeof(ArchiveGetFindCachePath), .comparator = lstComparatorStr),
+                    };
+                    ArchiveGetFindCacheRepo repo =
+                    {
+                        .repoIdx = fork->sourceRepoIdx,
+                        .archiveList = lstNewP(sizeof(ArchiveGetFindCacheArchive)),
+                        .warnList = strLstNew(),
+                    };
+
+                    MEM_CONTEXT_BEGIN(lstMemContext(result.archiveFileMapList))
+                    {
+                        archive.archiveId = strDup(forkData->sourceArchiveId);
+                        archive.archivePath = forkSourcePath(
+                            forkData->sourceStanza, STORAGE_PATH_ARCHIVE, forkData->sourceArchiveId);
+                        repo.cipherSpecArchive = cipherSpecMapDup(infoArchiveCipherSpecMap(sourceInfo));
+                    }
+                    MEM_CONTEXT_END();
+
+                    lstAdd(repo.archiveList, &archive);
+                    parentCache = lstNewP(sizeof(ArchiveGetFindCacheRepo));
+                    lstAdd(parentCache, &repo);
+                }
+
+                if (!archiveGetFind(request, &result, parentCache, warnList, strLstSize(archiveRequestList) == 1))
+                    break;
             }
 
             // Sort the list to make searching for files faster
@@ -702,8 +779,14 @@ cmdArchiveGet(void)
         const String *const walDestination =
             walPath(strLstGet(commandParam, 1), cfgOptionStr(cfgOptPgPath), STR(cfgCommandName()));
 
+        // Synchronous reads prevent queued WAL from bypassing timeline boundaries after promotion.
+        const bool fork = archiveForkLoad() != NULL;
+
+        if (fork && cfgOptionBool(cfgOptArchiveAsync))
+            LOG_DETAIL("fork archive-get uses synchronous archive reads");
+
         // Async get can only be performed on WAL segments, history or other files must use synchronous mode
-        if (cfgOptionBool(cfgOptArchiveAsync) && walIsSegment(walSegment))
+        if (!fork && cfgOptionBool(cfgOptArchiveAsync) && walIsSegment(walSegment))
         {
             bool first = true;                                          // Is this the first time the loop has run?
             bool found = false;                                         // Has the WAL segment been found yet?
@@ -922,6 +1005,7 @@ archiveGetAsyncCallback(void *const data, const unsigned int clientIdx)
                 const ArchiveGetFile *const actual = lstGet(archiveFileMap->actualList, actualIdx);
 
                 pckWriteStrP(param, actual->file);
+                pckWriteStrP(param, actual->archivePath);
                 pckWriteU32P(param, actual->repoIdx);
                 pckWriteStrP(param, actual->archiveId);
                 cipherSpecMapPack(param, actual->cipherSpecArchive);

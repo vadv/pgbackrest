@@ -6,6 +6,7 @@ Backup Protocol Handler
 #include "command/backup/blockIncr.h"
 #include "command/backup/pageChecksum.h"
 #include "command/backup/protocol.h"
+#include "command/fork/common.h"
 #include "common/compress/helper.h"
 #include "common/crypto/cipherBlock.h"
 #include "common/crypto/hash.h"

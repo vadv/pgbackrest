@@ -1,6 +1,7 @@
 /***********************************************************************************************************************************
 Test Archive Get Command
 ***********************************************************************************************************************************/
+#include "command/fork/common.h"
 #include "common/io/bufferWrite.h"
 #include "common/io/fdRead.h"
 #include "common/io/fdWrite.h"
@@ -1046,6 +1047,19 @@ testRun(void)
         TEST_STORAGE_LIST(storagePgWrite(), "pg_wal", "RECOVERYHISTORY\n", .remove = true);
 
         // -------------------------------------------------------------------------------------------------------------------------
+        TEST_TITLE("get backup history from its WAL directory");
+
+        HRN_STORAGE_PUT_Z(
+            storageRepoWrite(), STORAGE_REPO_ARCHIVE "/10-1/000000010000000100000001.00000028.backup", "BACKUP HISTORY");
+        TEST_RESULT_INT(
+            archiveGetSingle(
+                STRDEF("000000010000000100000001.00000028.backup"), STRDEF(TEST_PATH "/pg/pg_wal/RECOVERYHISTORY")),
+            0, "get backup history");
+        TEST_RESULT_LOG("P00   INFO: found 000000010000000100000001.00000028.backup in the repo1: 10-1 archive");
+        TEST_STORAGE_GET(storagePg(), "pg_wal/RECOVERYHISTORY", "BACKUP HISTORY");
+        TEST_STORAGE_LIST(storagePgWrite(), "pg_wal", "RECOVERYHISTORY\n", .remove = true);
+
+        // -------------------------------------------------------------------------------------------------------------------------
         TEST_TITLE("get compressed and encrypted WAL segment with invalid repo");
 
         HRN_INFO_PUT(
@@ -1301,6 +1315,285 @@ testRun(void)
 
         // Check that the ok file was removed
         TEST_STORAGE_LIST_EMPTY(storageSpool(), STORAGE_SPOOL_ARCHIVE_IN);
+    }
+
+    // *****************************************************************************************************************************
+    if (testBegin("fork reads WAL from the correct archive"))
+    {
+        harnessLogLevelSet(logLevelDetail);
+        StringList *const args = strLstNew();
+        hrnCfgArgRawZ(args, cfgOptStanza, "child");
+        hrnCfgArgRawZ(args, cfgOptRepoPath, TEST_PATH "/repo");
+        hrnCfgArgRawZ(args, cfgOptPgPath, TEST_PATH "/pg");
+        hrnCfgArgRawBool(args, cfgOptArchiveAsync, true);
+        hrnCfgArgRawZ(args, cfgOptSpoolPath, TEST_PATH "/spool");
+        HRN_CFG_LOAD(cfgCmdArchiveGet, args);
+        HRN_PG_CONTROL_PUT(storagePgWrite(), PG_VERSION_16);
+        HRN_STORAGE_PATH_CREATE(storagePgWrite(), "pg_wal");
+
+        const char *const archiveInfo =
+            "[db]\n"
+            "db-id=1\n"
+            "\n"
+            "[db:history]\n"
+            "1={\"db-id\":" HRN_PG_SYSTEMID_16_Z ",\"db-version\":\"16\"}\n";
+        HRN_INFO_PUT(storageRepoWrite(), INFO_ARCHIVE_PATH_FILE, archiveInfo);
+        HRN_INFO_PUT(storageRepoWrite(), "archive/source/archive.info", archiveInfo);
+
+        const InfoForkData data =
+        {
+            .sourceId = forkSourceId(0, STRDEF("source"), STRDEF("16-1"), HRN_PG_SYSTEMID_16),
+            .sourceRepoKey = 1,
+            .sourceStanza = STRDEF("source"),
+            .sourceArchiveId = STRDEF("16-1"),
+            .backupLabel = STRDEF("20260101-000000F"),
+            .importedBackupList = strLstNewSplitZ(STRDEF("20260101-000000F"), ","),
+            .pgVersion = PG_VERSION_16,
+            .systemId = HRN_PG_SYSTEMID_16,
+            .walSegmentSize = 16 * 1024 * 1024,
+            .sourceTimeline = 1,
+            .sourceHistory = EMPTY_STR,
+            .targetType = STRDEF("lsn"),
+            .targetValue = STRDEF("0/2800000"),
+            .state = infoForkStatePublished,
+            .history = EMPTY_STR,
+        };
+        InfoFork *const info = infoForkNew(6, &data);
+        infoForkSaveFile(info, storageRepoWrite(), STRDEF(INFO_FORK_PATH_FILE), cfgCipherSpecMainIdx(0));
+
+        HRN_STORAGE_PUT_Z(
+            storageRepoWrite(),
+            "archive/source/16-1/0000000100000000/000000010000000000000001-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "parent");
+        HRN_STORAGE_PUT_Z(
+            storageRepoWrite(),
+            "archive/source/16-1/0000000100000000/000000010000000000000002-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "divergent");
+        HRN_STORAGE_PUT_Z(
+            storageRepoWrite(),
+            "archive/source/16-1/0000000200000000/000000020000000000000002-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "other fork");
+        HRN_STORAGE_PUT_Z(storageRepoWrite(), "archive/source/16-1/00000003.history", "parent future");
+        const String *const destination = STRDEF(TEST_PATH "/pg/pg_wal/RECOVERYXLOG");
+
+        TEST_RESULT_INT(archiveGetSingle(STRDEF("000000010000000000000001"), destination), 0, "inherit exact source WAL");
+        TEST_RESULT_LOG("P00   INFO: found 000000010000000000000001 in the repo1: 16-1 archive");
+        TEST_STORAGE_GET(storagePg(), "pg_wal/RECOVERYXLOG", "parent");
+        TEST_RESULT_INT(archiveGetSingle(STRDEF("000000010000000000000002"), destination), 0, "initial recovery reads boundary");
+        TEST_RESULT_LOG("P00   INFO: found 000000010000000000000002 in the repo1: 16-1 archive");
+
+        const ArchiveFork *const fork = archiveForkLoad();
+        TEST_RESULT_VOID(archiveForkHistory(fork, STRDEF("00000002.history"), STRDEF("1\t0/2800000\tfork\n")), "accept branch");
+
+        // The timeline history excludes these stale files from the fork archive and spool.
+        HRN_STORAGE_PUT_Z(
+            storageRepoWrite(),
+            STORAGE_REPO_ARCHIVE "/16-1/0000000100000000/000000010000000000000002-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stale own");
+        HRN_STORAGE_PUT_Z(storageSpoolWrite(), STORAGE_SPOOL_ARCHIVE_IN "/000000010000000000000002", "stale spool");
+        StringList *const asyncArgs = strLstDup(args);
+        strLstAddZ(asyncArgs, "000000010000000000000002");
+        strLstAdd(asyncArgs, destination);
+        HRN_CFG_LOAD(cfgCmdArchiveGet, asyncArgs);
+        TEST_RESULT_INT(cmdArchiveGet(), 1, "closed parent boundary is hidden before own or spool lookup");
+        TEST_RESULT_LOG(
+            "P00 DETAIL: fork archive-get uses synchronous archive reads\n"
+            "P00   INFO: unable to find 000000010000000000000002 in the archive");
+
+        TEST_RESULT_INT(archiveGetSingle(STRDEF("000000020000000000000002"), destination), 1, "no parent fallback for child name");
+        TEST_RESULT_LOG("P00   INFO: unable to find 000000020000000000000002 in the archive");
+        TEST_RESULT_INT(archiveGetSingle(STRDEF("00000003.history"), destination), 1, "history never falls back");
+        TEST_RESULT_LOG("P00   INFO: unable to find 00000003.history in the archive");
+
+        HRN_STORAGE_PUT_Z(
+            storageRepoWrite(),
+            STORAGE_REPO_ARCHIVE "/16-1/0000000200000000/000000020000000000000002-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "own child");
+        TEST_RESULT_INT(archiveGetSingle(STRDEF("000000020000000000000002"), destination), 0, "read exact own child name");
+        TEST_RESULT_LOG("P00   INFO: found 000000020000000000000002 in the repo1: 16-1 archive");
+        TEST_STORAGE_GET(storagePg(), "pg_wal/RECOVERYXLOG", "own child");
+
+        HRN_STORAGE_PUT_Z(
+            storageRepoWrite(),
+            STORAGE_REPO_ARCHIVE "/16-1/0000000100000000/000000010000000000000001-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "own inherited");
+        TEST_RESULT_INT(archiveGetSingle(STRDEF("000000010000000000000001"), destination), 0, "own wins without comparing parent");
+        TEST_RESULT_LOG("P00   INFO: found 000000010000000000000001 in the repo1: 16-1 archive");
+        TEST_STORAGE_GET(storagePg(), "pg_wal/RECOVERYXLOG", "own inherited");
+
+        storageRemoveP(
+            storageRepoWrite(),
+            STRDEF(STORAGE_REPO_ARCHIVE "/16-1/0000000100000000/000000010000000000000001-"
+                   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+        HRN_STORAGE_PUT_EMPTY(
+            storageRepoWrite(),
+            STORAGE_REPO_ARCHIVE "/16-1/0000000100000000/000000010000000000000001-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gz");
+        TEST_ERROR(
+            archiveGetSingle(STRDEF("000000010000000000000001"), destination), FileReadError,
+            "unable to get 000000010000000000000001:\n"
+            "repo1: 16-1/0000000100000000/000000010000000000000001-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gz"
+            " [FormatError] unexpected eof in compressed data");
+
+        HRN_STORAGE_MODE(storageRepoWrite(), STORAGE_REPO_ARCHIVE "/16-1", .mode = 0400);
+        TEST_ERROR(
+            archiveGetSingle(STRDEF("000000010000000000000001"), destination), RepoInvalidError,
+            "unable to find a valid repository");
+        TEST_RESULT_LOG(
+            "P00   WARN: repo1: [PathOpenError] unable to list file info for path '" TEST_PATH
+            "/repo/archive/child/16-1/0000000100000000': [13] Permission denied");
+        HRN_STORAGE_MODE(storageRepoWrite(), STORAGE_REPO_ARCHIVE "/16-1");
+
+        TEST_ERROR(
+            archiveForkHistory(fork, STRDEF("00000003.history"), STRDEF("1\t0/2800000\tfork\n2\t0/2700000\tbad\n")),
+            FormatError, "invalid fork timeline history");
+        TEST_RESULT_VOID(
+            archiveForkHistory(fork, STRDEF("00000003.history"), STRDEF("1\t0/2800000\tfork\n2\t0/3800000\tnext\n")),
+            "accept a later promotion");
+        TEST_RESULT_BOOL(archiveForkWalAllowed(fork->info, STRDEF("000000020000000000000003"), false), false,
+                         "later own boundary is also hidden");
+        TEST_RESULT_BOOL(archiveForkWalAllowed(fork->info, STRDEF("000000030000000000000003"), false), true,
+                         "successor owns the boundary");
+        TEST_RESULT_BOOL(archiveForkWalAllowed(fork->info, STRDEF("000000030000000000000003"), true), false,
+                         "successor is never inherited");
+
+        InfoForkData selected = data;
+        selected.sourceTimeline = 4;
+        selected.sourceHistory = STRDEF("1 0/2000000 selected branch\n");
+        const InfoFork *const selectedInfo = infoForkNew(6, &selected);
+        TEST_RESULT_BOOL(archiveForkWalAllowed(selectedInfo, STRDEF("000000020000000000000001"), true), false,
+                         "source side branch is not eligible even below the timeline cap");
+        TEST_RESULT_BOOL(archiveForkWalAllowed(selectedInfo, STRDEF("000000010000000000000001"), true), true,
+                         "whole old segment ending exactly at the switch is eligible");
+        TEST_RESULT_BOOL(archiveForkWalAllowed(selectedInfo, STRDEF("000000010000000000000002"), true), false,
+                         "old segment starting at the switch is not eligible");
+        TEST_RESULT_BOOL(archiveForkWalAllowed(selectedInfo, STRDEF("000000040000000000000001"), true), false,
+                         "new timeline does not own earlier segments");
+        TEST_RESULT_BOOL(archiveForkWalAllowed(selectedInfo, STRDEF("000000040000000000000002.partial"), true), true,
+                         "partial names obey the same range without renaming");
+
+        // PostgreSQL can append the selected timeline after recovery to an earlier timeline.
+        // Normalize only the saved source history. Later promotions must extend the accepted fork history.
+        InfoForkData ancestorData = data;
+        ancestorData.sourceTimeline = 4;
+        ancestorData.sourceHistory = STRDEF("1\t0/2000000\tsource one\n2\t0/4000000\tsource two\n");
+        const String *const raw = STRDEF("1\t0/2000000\tsource one\n2\t0/4000000\tsource two\n4\t0/3000000\tstop\n");
+        const String *const canonical = STRDEF("1\t0/2000000\tpgBackRest fork\n2\t0/3000000\tstop\n");
+        ArchiveFork ancestorFork = {.info = infoForkNew(6, &ancestorData), .repoIdx = 0, .sourceRepoIdx = 0};
+        TEST_RESULT_STR(
+            archiveForkHistoryNormalize(ancestorFork.info, STRDEF("00000005.history"), raw), canonical,
+            "ancestor recovery discards future source intervals");
+        TEST_RESULT_STR(
+            archiveForkHistoryNormalize(ancestorFork.info, STRDEF("00000005.history"), canonical), canonical,
+            "canonical history is unchanged");
+        const String *const normal =
+            STRDEF("1\t0/2000000\tsource one\n2\t0/4000000\tsource two\n4\t0/5000000\tstop\n");
+        TEST_RESULT_STR(
+            archiveForkHistoryNormalize(ancestorFork.info, STRDEF("00000005.history"), normal), normal,
+            "ordinary promotion preserves all bytes");
+        TEST_ERROR(
+            archiveForkHistoryNormalize(
+                ancestorFork.info, STRDEF("00000005.history"),
+                STRDEF("1\t0/2100000\twrong\n2\t0/4000000\tsource two\n4\t0/3000000\tstop\n")),
+            ArchiveMismatchError, "new timeline history does not extend the fork lineage");
+        TEST_ERROR(
+            archiveForkHistoryNormalize(
+                ancestorFork.info, STRDEF("00000005.history"),
+                STRDEF("1\t0/2000000\tsource one\n2\t0/4000000\tsource two\n3\t0/3000000\twrong parent\n")),
+            ArchiveMismatchError, "new timeline history does not extend the fork lineage");
+        TEST_RESULT_VOID(archiveForkHistory(&ancestorFork, STRDEF("00000005.history"), raw), "accept actual ancestor branch");
+        TEST_RESULT_STR(infoForkData(ancestorFork.info)->history, canonical, "persist canonical lineage");
+        TEST_RESULT_UINT(infoForkData(ancestorFork.info)->branchLsn, 0x3000000, "persist actual switch location");
+        TEST_RESULT_VOID(archiveForkHistory(&ancestorFork, STRDEF("00000005.history"), raw), "raw push retry is idempotent");
+        TEST_RESULT_BOOL(
+            archiveForkWalAllowed(ancestorFork.info, STRDEF("000000040000000000000004"), true), false,
+            "discarded source timeline is no longer inherited");
+        TEST_RESULT_BOOL(
+            archiveForkHistoryContains(ancestorData.sourceHistory, 4, 1, 0x1FFFFFF), true, "last byte of ancestor interval");
+        TEST_RESULT_BOOL(
+            archiveForkHistoryContains(ancestorData.sourceHistory, 4, 1, 0x2000000), false, "ancestor interval end is exclusive");
+        TEST_RESULT_BOOL(
+            archiveForkHistoryContains(ancestorData.sourceHistory, 4, 2, 0x2000000), true, "successor interval start is inclusive");
+        TEST_RESULT_BOOL(
+            archiveForkHistoryContains(ancestorData.sourceHistory, 4, 3, 0x3000000), false, "sibling timeline is not inherited");
+        TEST_RESULT_BOOL(
+            archiveForkHistoryContains(ancestorData.sourceHistory, 4, 4, 0x3FFFFFF), false, "leaf does not own earlier bytes");
+        TEST_RESULT_BOOL(
+            archiveForkHistoryContains(ancestorData.sourceHistory, 4, 4, 0x4000000), true, "leaf owns bytes from its start");
+        TEST_RESULT_VOID(
+            archiveForkHistory(
+                &ancestorFork, STRDEF("00000006.history"),
+                STRDEF("1\t0/2000000\tsource one\n2\t0/4000000\tsource two\n4\t0/3000000\tstop\n5\t0/5000000\tpromote\n")),
+            "later raw promotion extends the internal corrected lineage");
+        TEST_RESULT_STR(
+            infoForkData(ancestorFork.info)->history,
+            STRDEF("1\t0/2000000\tpgBackRest fork\n2\t0/3000000\tstop\n5\t0/5000000\tpromote\n"),
+            "raw inherited source intervals remain absent from later metadata");
+        TEST_RESULT_VOID(
+            archiveForkHistory(
+                &ancestorFork, STRDEF("00000006.history"),
+                STRDEF("1\t0/2000000\tsource one\n2\t0/4000000\tsource two\n4\t0/3000000\tstop\n5\t0/5000000\tpromote\n")),
+            "later raw promotion retries are idempotent");
+        TEST_RESULT_BOOL(
+            archiveForkWalAllowed(ancestorFork.info, STRDEF("000000040000000000000004"), true), false,
+            "later raw promotion does not reopen discarded source WAL");
+        TEST_RESULT_BOOL(
+            archiveForkWalAllowed(ancestorFork.info, STRDEF("000000050000000000000005"), false), false,
+            "later promotion hides predecessor WAL starting at the switch");
+        HRN_STORAGE_PUT_Z(
+            storageRepoWrite(),
+            STORAGE_REPO_ARCHIVE "/16-1/0000000500000000/000000050000000000000005-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "divergent predecessor");
+        TEST_RESULT_INT(
+            archiveGetSingle(STRDEF("000000050000000000000005"), destination), 1,
+            "raw later history hides an archived predecessor boundary");
+        TEST_RESULT_LOG("P00   INFO: unable to find 000000050000000000000005 in the archive");
+        TEST_RESULT_INT(
+            archiveGetSingle(STRDEF("000000060000000000000005"), destination), 1,
+            "missing own successor boundary never falls back");
+        TEST_RESULT_LOG("P00   INFO: unable to find 000000060000000000000005 in the archive");
+        TEST_RESULT_STR(
+            archiveForkHistoryNormalize(ancestorFork.info, STRDEF("00000005.history"), raw), canonical,
+            "raw first history retries remain stable after later promotion");
+        TEST_ERROR(
+            archiveForkHistory(
+                &ancestorFork, STRDEF("00000007.history"),
+                STRDEF("1\t0/2000000\tsource one\n2\t0/4000000\tsource two\n4\t0/3100000\tchanged branch\n"
+                       "5\t0/5000000\tpromote\n6\t0/6000000\tnext\n")),
+            ArchiveMismatchError, "new timeline history does not extend the fork lineage");
+        TEST_ERROR(
+            archiveForkHistory(
+                &ancestorFork, STRDEF("00000007.history"),
+                STRDEF("1\t0/2000000\tsource one\n2\t0/4000000\tsource two\n4\t0/3000000\tstop\n"
+                       "5\t0/2800000\tinvalid own interval\n6\t0/6000000\tnext\n")),
+            FormatError, "invalid fork timeline history");
+        TEST_ERROR(
+            archiveForkHistory(
+                &ancestorFork, STRDEF("00000007.history"),
+                STRDEF("1\t0/2000000\tpgBackRest fork\n2\t0/4000000\twrong\n5\t0/5000000\tpromote\n6\t0/6000000\tnext\n")),
+            ArchiveMismatchError, "new timeline history does not extend the fork lineage");
+
+        ancestorFork.info = infoForkNew(6, &ancestorData);
+        TEST_RESULT_VOID(
+            archiveForkHistory(&ancestorFork, STRDEF("00000005.history"), STRDEF("1\t0/1800000\tactual PG parent\n")),
+            "a correctly generated truncated history needs no repair");
+        TEST_RESULT_STR(infoForkData(ancestorFork.info)->history, STRDEF("1\t0/1800000\tactual PG parent\n"),
+                        "correct PostgreSQL reason text is preserved");
+        TEST_RESULT_VOID(
+            archiveForkHistory(
+                &ancestorFork, STRDEF("00000006.history"),
+                STRDEF("1\t0/1800000\tactual PG parent\n5\t0/1900000\tfirst promotion\n")),
+            "corrected branch can promote before the frozen source switchpoints");
+        TEST_RESULT_VOID(
+            archiveForkHistory(
+                &ancestorFork, STRDEF("00000007.history"),
+                STRDEF("1\t0/1800000\tactual PG parent\n5\t0/1900000\tfirst promotion\n6\t0/1A00000\tsecond promotion\n")),
+            "own transitions are never mistaken for the frozen source prefix");
+
+        ancestorFork.info = infoForkNew(6, &ancestorData);
+        TEST_RESULT_VOID(
+            archiveForkHistory(
+                &ancestorFork, STRDEF("00000005.history"),
+                STRDEF("1\t0/2000000\tsource one\n2\t0/4000000\tsource two\n4\t0/2000000\tstop\n")),
+            "a switch exactly at an old boundary belongs to the preceding interval");
+        TEST_RESULT_STR(infoForkData(ancestorFork.info)->history, STRDEF("1\t0/2000000\tstop\n"),
+                        "zero length intermediate intervals are removed");
     }
 
     FUNCTION_HARNESS_RETURN_VOID();

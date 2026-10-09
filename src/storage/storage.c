@@ -30,6 +30,13 @@ struct Storage
     StoragePathExpressionCallback *pathExpressionFunction;
 };
 
+FN_EXTERN StoragePathExpressionCallback *
+storagePathExpression(const Storage *const this)
+{
+    ASSERT(this != NULL);
+    return this->pathExpressionFunction;
+}
+
 // Storage list cache
 typedef struct StorageListCache
 {

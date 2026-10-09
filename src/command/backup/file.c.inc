@@ -296,7 +296,7 @@ backupFile(
                     {
                         MEM_CONTEXT_PRIOR_BEGIN()
                         {
-                            biMapRead = storageNewReadMultiP(storageRepo());
+                            biMapRead = storageNewReadMultiP(forkStorageRepoIdx(cfgOptionGroupIdxDefault(cfgOptGrpRepo)));
                         }
                         MEM_CONTEXT_PRIOR_END();
                     }
