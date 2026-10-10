@@ -18,6 +18,7 @@ Command constants
 #define CFGCMD_HELP                                                 "help"
 #define CFGCMD_INFO                                                 "info"
 #define CFGCMD_MANIFEST                                             "manifest"
+#define CFGCMD_MOUNT                                                "mount"
 #define CFGCMD_REPO_GET                                             "repo-get"
 #define CFGCMD_REPO_LS                                              "repo-ls"
 #define CFGCMD_REPO_RM                                              "repo-rm"
@@ -32,7 +33,7 @@ Command constants
 #define CFGCMD_VERIFY                                               "verify"
 #define CFGCMD_VERSION                                              "version"
 
-#define CFG_COMMAND_TOTAL                                           22
+#define CFG_COMMAND_TOTAL                                           23
 
 /***********************************************************************************************************************************
 Option group constants
@@ -97,6 +98,9 @@ Option constants
 #define CFGOPT_LOG_SUBPROCESS                                       "log-subprocess"
 #define CFGOPT_LOG_TIMESTAMP                                        "log-timestamp"
 #define CFGOPT_MANIFEST_SAVE_THRESHOLD                              "manifest-save-threshold"
+#define CFGOPT_MOUNT_ALLOW_OTHER                                    "mount-allow-other"
+#define CFGOPT_MOUNT_CACHE_PATH                                     "mount-cache-path"
+#define CFGOPT_MOUNT_COW_PATH                                       "mount-cow-path"
 #define CFGOPT_NEUTRAL_UMASK                                        "neutral-umask"
 #define CFGOPT_OLDEST                                               "oldest"
 #define CFGOPT_ONLINE                                               "online"
@@ -146,7 +150,7 @@ Option constants
 #define CFGOPT_VERBOSE                                              "verbose"
 #define CFGOPT_VERSION                                              "version"
 
-#define CFG_OPTION_TOTAL                                            202
+#define CFG_OPTION_TOTAL                                            205
 
 /***********************************************************************************************************************************
 Option value constants
@@ -413,6 +417,34 @@ Option value constants
 #define CFGOPTVAL_TYPE_INCR                                         STRID5("incr", 0x90dc90)
 #define CFGOPTVAL_TYPE_INCR_Z                                       "incr"
 
+#define CFGOPTVAL_MOUNT_TYPE_DEFAULT                                0
+#define CFGOPTVAL_MOUNT_TYPE_DEFAULT_STRID                          STRID5S("default", 0, 0x5195098a42)
+#define CFGOPTVAL_MOUNT_TYPE_DEFAULT_Z                              "default"
+#define CFGOPTVAL_MOUNT_TYPE_PRESERVE                               1
+#define CFGOPTVAL_MOUNT_TYPE_PRESERVE_STRID                         STRID5S("preserve", 1, 0x2da45996504)
+#define CFGOPTVAL_MOUNT_TYPE_PRESERVE_Z                             "preserve"
+#define CFGOPTVAL_MOUNT_TYPE_IMMEDIATE                              2
+#define CFGOPTVAL_MOUNT_TYPE_IMMEDIATE_STRID                        STRID5S("immediate", 2, 0x5a05242b5a96)
+#define CFGOPTVAL_MOUNT_TYPE_IMMEDIATE_Z                            "immediate"
+#define CFGOPTVAL_MOUNT_TYPE_STANDBY                                3
+#define CFGOPTVAL_MOUNT_TYPE_STANDBY_STRID                          STRID5S("standby", 3, 0x6444706938)
+#define CFGOPTVAL_MOUNT_TYPE_STANDBY_Z                              "standby"
+#define CFGOPTVAL_MOUNT_TYPE_NONE                                   4
+#define CFGOPTVAL_MOUNT_TYPE_NONE_STRID                             STRID5S("none", 4, 0x2b9eea)
+#define CFGOPTVAL_MOUNT_TYPE_NONE_Z                                 "none"
+#define CFGOPTVAL_MOUNT_TYPE_NAME                                   5
+#define CFGOPTVAL_MOUNT_TYPE_NAME_STRID                             STRID5S("name", 5, 0x2b42ec)
+#define CFGOPTVAL_MOUNT_TYPE_NAME_Z                                 "name"
+#define CFGOPTVAL_MOUNT_TYPE_TIME                                   6
+#define CFGOPTVAL_MOUNT_TYPE_TIME_STRID                             STRID5S("time", 6, 0x56a680e)
+#define CFGOPTVAL_MOUNT_TYPE_TIME_Z                                 "time"
+#define CFGOPTVAL_MOUNT_TYPE_LSN                                    7
+#define CFGOPTVAL_MOUNT_TYPE_LSN_STRID                              STRID5S("lsn", 7, 0x74d81e)
+#define CFGOPTVAL_MOUNT_TYPE_LSN_Z                                  "lsn"
+#define CFGOPTVAL_MOUNT_TYPE_XID                                    8
+#define CFGOPTVAL_MOUNT_TYPE_XID_STRID                              STRID5S("xid", 8, 0x22702e)
+#define CFGOPTVAL_MOUNT_TYPE_XID_Z                                  "xid"
+
 #define CFGOPTVAL_RESTORE_TYPE_DEFAULT                              0
 #define CFGOPTVAL_RESTORE_TYPE_DEFAULT_STRID                        STRID5S("default", 0, 0x5195098a42)
 #define CFGOPTVAL_RESTORE_TYPE_DEFAULT_Z                            "default"
@@ -455,6 +487,7 @@ typedef enum
     cfgCmdHelp,
     cfgCmdInfo,
     cfgCmdManifest,
+    cfgCmdMount,
     cfgCmdRepoGet,
     cfgCmdRepoLs,
     cfgCmdRepoRm,
@@ -539,6 +572,9 @@ typedef enum
     cfgOptLogSubprocess,
     cfgOptLogTimestamp,
     cfgOptManifestSaveThreshold,
+    cfgOptMountAllowOther,
+    cfgOptMountCachePath,
+    cfgOptMountCowPath,
     cfgOptNeutralUmask,
     cfgOptOldest,
     cfgOptOnline,

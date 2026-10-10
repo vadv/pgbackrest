@@ -22,6 +22,7 @@ Main
 #include "command/local/local.h"
 #include "command/lock.h"
 #include "command/manifest/manifest.h"
+#include "command/mount/fs.h"
 #include "command/remote/remote.h"
 #include "command/repo/get.h"
 #include "command/repo/ls.h"
@@ -185,6 +186,12 @@ main(int argListSize, const char *argList[])
                 // -----------------------------------------------------------------------------------------------------------------
                 case cfgCmdManifest:
                     cmdManifest();
+                    break;
+
+                // Mount a backup
+                // -----------------------------------------------------------------------------------------------------------------
+                case cfgCmdMount:
+                    cmdMount();
                     break;
 
                 // Repository get file command

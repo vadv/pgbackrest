@@ -47,7 +47,7 @@ endif
 # OS-specific settings
 ####################################################################################################################################
 if host_machine.system() == 'linux'
-    add_global_arguments('-D_POSIX_C_SOURCE=200809L', language: 'c')
+    add_global_arguments('-D_POSIX_C_SOURCE=200809L', '-D_XOPEN_SOURCE=700', language: 'c')
 elif host_machine.system() == 'darwin'
     add_global_arguments('-D_DARWIN_C_SOURCE', language: 'c')
 endif
@@ -222,6 +222,12 @@ lib_xml = dependency('libxml-2.0')
 lib_z = dependency('zlib')
 
 configuration.set('ZLIB_CONST', true, description: 'Require zlib const input buffer')
+
+# Find optional FUSE library
+lib_fuse3 = dependency('fuse3', version: '>=3.10', required: get_option('libfuse3'))
+if lib_fuse3.found() and host_machine.system() == 'linux'
+    configuration.set('HAVE_LIBFUSE3', true, description: 'Is Linux libfuse3 present?')
+endif
 
 # Find optional systemd library
 lib_systemd = dependency('libsystemd', required: get_option('libsystemd'))

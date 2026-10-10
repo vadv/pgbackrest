@@ -310,7 +310,8 @@ testRun(void)
 
         TEST_ERROR(
             restoreFile(
-                strNewFmt(STORAGE_REPO_BACKUP "/%s/%s.gz", strZ(repoFileReferenceFull), strZ(repoFile1)), repoIdx, compressTypeGz,
+                storagePgWrite(), strNewFmt(STORAGE_REPO_BACKUP "/%s/%s.gz", strZ(repoFileReferenceFull), strZ(repoFile1)),
+                repoIdx, compressTypeGz,
                 0, false, false, false, cipherSpecNewP(cipherTypeAes256Cbc, BUFSTRDEF("badpass"), .digest = hashTypeSha1), NULL,
                 fileList),
             ChecksumError,

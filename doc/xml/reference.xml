@@ -2481,6 +2481,49 @@
                 </option-list>
             </command>
 
+            <command id="mount" name="Mount Backup">
+                <summary>Mount a backup with FUSE.</summary>
+                <text>
+                    <p>Use Linux with libfuse3. Give one empty directory as the mount point. The command runs in the foreground. To stop it, use <cmd>fusermount3 -u</cmd> or send SIGINT or SIGTERM.</p>
+                    <p>The command restores files to a local cache when you read them. The first read of a file can restore the whole file. The mount supports the same repositories, encryption, compression, bundles, and block-incremental backups as <cmd>restore</cmd>.</p>
+                    <p>Tablespaces use directories inside the mount. The mount replaces external links with files or directories inside PGDATA.</p>
+                    <p>The mount is read-only by default. Use <br-option>--mount-cow-path</br-option> to enable writes. Copy-on-write (COW) stores changed blocks in local files. Unmounting or a crash discards these changes. Export the data you need and stop PostgreSQL before you unmount.</p>
+                    <p>Configure PostgreSQL recovery separately. Use <cmd>archive-get</cmd> to read WAL files. Set its <br-option>--pg1-path</br-option> to the mount point. Keep the backup and its referenced backups until you unmount. Keep the cache and COW directories outside the mount and the repository.</p>
+                </text>
+                <option-list>
+                    <option id="set" name="Set">
+                        <summary>Backup to mount.</summary>
+                        <text><p>Select a backup label. The default is <id>latest</id>. The command searches repositories in the same order as <cmd>restore</cmd>.</p></text>
+                        <example>20150131-153358F</example>
+                    </option>
+                    <option id="type" name="Type">
+                        <summary>Recovery type for backup selection.</summary>
+                        <text><p>Use <br-option>--type=time</br-option> or <br-option>--type=lsn</br-option> to select a backup for <br-option>--target</br-option>. Configure PostgreSQL recovery separately.</p><allow-list inherit="type" command="restore"/></text>
+                        <example>time</example>
+                    </option>
+                    <option id="target" name="Target">
+                        <summary>Recovery target for backup selection.</summary>
+                        <text><p>Use this option with <br-option>--type=time</br-option> or <br-option>--type=lsn</br-option>. Use the same target in the PostgreSQL recovery settings.</p></text>
+                        <example>2026-01-01 00:00:00+00</example>
+                    </option>
+                    <option id="mount-cache-path" name="Mount Cache Path">
+                        <summary>Directory for cached files.</summary>
+                        <text><p>Use a local directory with mode 0700. The directory must belong to the user who runs <cmd>mount</cmd>. Later mounts can reuse the cached files. Each file name contains its checksum and size. The command checks cached files before reuse. Remove cached files manually when you no longer need them.</p></text>
+                        <example>/var/tmp/pgbackrest-cache</example>
+                    </option>
+                    <option id="mount-cow-path" name="Mount Copy-on-Write Path">
+                        <summary>Directory for changed blocks.</summary>
+                        <text><p>This option enables writes to the mount. Use an empty local directory with mode 0700. The directory must belong to the user who runs <cmd>mount</cmd>. Only one mount can use the directory at a time. The command removes COW files when you unmount. You cannot reuse COW files after a crash.</p></text>
+                        <example>/var/tmp/pgbackrest-cow</example>
+                    </option>
+                    <option id="mount-allow-other" name="Allow Other Mount Users">
+                        <summary>Allow other users to access the mount.</summary>
+                        <text><p>File permissions still apply. Run <cmd>mount</cmd> as the PostgreSQL user. This user owns all files in the mount. The FUSE configuration must allow this option.</p></text>
+                        <example>n</example>
+                    </option>
+                </option-list>
+            </command>
+
             <command id="repo-get" name="Repository Get">
                 <summary>Get a file from a repository.</summary>
 

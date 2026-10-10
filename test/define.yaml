@@ -899,7 +899,7 @@ unit:
       - command/restore/blockDelta
       - command/restore/clean.inc: included
       - command/restore/config.inc: included
-      - command/restore/file.inc: included
+      - command/restore/file
       - command/restore/process.inc: included
       - command/restore/protocol
       - command/restore/remap.inc: included
@@ -912,6 +912,18 @@ unit:
       - common/user
       - info/infoBackup
       - info/manifest/manifest
+
+  # --------------------------------------------------------------------------------------------------------------------------------
+  - name: command/mount
+    total: 5
+
+    include:
+      - info/manifest/manifest
+
+    coverage:
+      - command/mount/cow
+      - command/mount/cache
+      - command/mount/fs
 
   # --------------------------------------------------------------------------------------------------------------------------------
   - name: command/manifest
