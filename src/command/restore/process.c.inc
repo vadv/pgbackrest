@@ -411,6 +411,7 @@ restoreJobCallback(void *const data, const unsigned int clientIdx)
             while (!lstEmpty(queue))
             {
                 const ManifestFile file = manifestFileUnpack(jobData->manifest, *(ManifestFilePack **)lstGet(queue, 0));
+                const RestoreFileRepo repoFile = restoreFileRepo(jobData->manifest, &file);
 
                 // Break if bundled files have already been added and 1) the bundleId has changed or 2) the reference has changed
                 if (fileAdded && (bundleId != file.bundleId || !strEq(reference, file.reference)))
@@ -429,13 +430,7 @@ restoreJobCallback(void *const data, const unsigned int clientIdx)
                     else
                         fileName = file.name;
 
-                    pckWriteStrP(
-                        param,
-                        backupFileRepoPathP(
-                            file.reference != NULL ? file.reference : manifestData(jobData->manifest)->backupLabel,
-                            .manifestName = file.name, .bundleId = file.bundleId,
-                            .compressType = manifestData(jobData->manifest)->backupOptionCompressType,
-                            .blockIncr = file.blockIncrMapSize != 0));
+                    pckWriteStrP(param, repoFile.name);
                     pckWriteU32P(param, jobData->repoIdx);
                     pckWriteU32P(param, manifestData(jobData->manifest)->backupOptionCompressType);
                     pckWriteTimeP(param, manifestData(jobData->manifest)->backupTimestampCopyStart);
@@ -457,23 +452,13 @@ restoreJobCallback(void *const data, const unsigned int clientIdx)
                 pckWriteStrP(param, restoreManifestOwnerReplace(file.user, jobData->rootReplaceUser));
                 pckWriteStrP(param, restoreManifestOwnerReplace(file.group, jobData->rootReplaceGroup));
 
-                // If block incremental then modify offset and size to where the map is stored since we need to read that first.
-                if (file.blockIncrMapSize != 0)
+                pckWriteBoolP(param, repoFile.limit != NULL);
+
+                if (repoFile.limit != NULL)
                 {
-                    pckWriteBoolP(param, true);
-                    pckWriteU64P(param, file.bundleOffset + file.sizeRepo - file.blockIncrMapSize);
-                    pckWriteU64P(param, file.blockIncrMapSize);
+                    pckWriteU64P(param, repoFile.offset);
+                    pckWriteU64P(param, varUInt64(repoFile.limit));
                 }
-                // Else write bundle offset/size
-                else if (file.bundleId != 0)
-                {
-                    pckWriteBoolP(param, true);
-                    pckWriteU64P(param, file.bundleOffset);
-                    pckWriteU64P(param, file.sizeRepo);
-                }
-                // Else restore as a whole file
-                else
-                    pckWriteBoolP(param, false);
 
                 // Block incremental
                 pckWriteU64P(param, file.blockIncrMapSize);

@@ -1,13 +1,6 @@
 /***********************************************************************************************************************************
 Get the backup set to restore
 ***********************************************************************************************************************************/
-typedef struct RestoreBackupData
-{
-    unsigned int repoIdx;                                           // Internal repo index
-    const CipherSpec *cipherSpecManifest;                           // Cipher spec to open the manifest, none when not encrypted
-    const String *backupSet;                                        // Backup set to restore
-} RestoreBackupData;
-
 #define FUNCTION_LOG_RESTORE_BACKUP_DATA_TYPE                                                                                      \
     RestoreBackupData
 #define FUNCTION_LOG_RESTORE_BACKUP_DATA_FORMAT(value, buffer, bufferSize)                                                         \
@@ -32,7 +25,7 @@ restoreBackupData(const String *const backupLabel, const unsigned int repoIdx, c
     return restoreBackup;
 }
 
-static RestoreBackupData
+FN_EXTERN RestoreBackupData
 restoreBackupSet(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);

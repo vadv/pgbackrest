@@ -356,6 +356,7 @@ class TestBuild:
 
         meson_build += (
             "        lib_bz2,\n"
+            + "        lib_fuse3,\n"
             + "        lib_openssl,\n"
             + "        lib_lz4,\n"
             + "        lib_pq,\n"

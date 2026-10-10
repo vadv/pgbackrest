@@ -4,18 +4,9 @@ Restore Protocol Handler
 #ifndef COMMAND_RESTORE_PROTOCOL_H
 #define COMMAND_RESTORE_PROTOCOL_H
 
+#include "command/restore/file.h"
 #include "common/type/pack.h"
 #include "protocol/server.h"
-
-/***********************************************************************************************************************************
-Restore file types
-***********************************************************************************************************************************/
-typedef enum
-{
-    restoreResultPreserve,
-    restoreResultZero,
-    restoreResultCopy,
-} RestoreResult;
 
 /***********************************************************************************************************************************
 Functions

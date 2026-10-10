@@ -3,3 +3,4 @@ option('fatal-errors', type: 'boolean', value: false, description: 'Stop compila
 option('libssh2', type: 'feature', value: 'auto', description: 'Enable SFTP storage support')
 option('libzstd', type: 'feature', value: 'auto', description: 'Enable Zstandard compression support')
 option('libsystemd', type: 'feature', value: 'auto', description: 'Enable systemd notify support')
+option('libfuse3', type: 'feature', value: 'auto', description: 'Enable Linux FUSE backup mounts')

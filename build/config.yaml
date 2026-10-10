@@ -96,6 +96,12 @@ command:
     log-file: false
     log-level-default: DEBUG
 
+  mount:
+    command-role:
+      remote: {}
+    log-file: false
+    parameter-allowed: true
+
   repo-get:
     command-role:
       remote: {}
@@ -336,6 +342,29 @@ option:
     command-role:
       main: {}
 
+  mount-allow-other:
+    type: boolean
+    default: false
+    command:
+      mount: {}
+    command-role:
+      main: {}
+
+  mount-cache-path:
+    type: path
+    command:
+      mount: {}
+    command-role:
+      main: {}
+
+  mount-cow-path:
+    type: path
+    required: false
+    command:
+      mount: {}
+    command-role:
+      main: {}
+
   oldest:
     type: boolean
     default: false
@@ -403,6 +432,9 @@ option:
       manifest:
         default: latest
         required: true
+      mount:
+        default: latest
+        required: true
       restore:
         default: latest
         required: true
@@ -441,6 +473,7 @@ option:
       repo-rm:
         required: false
         internal: true
+      mount: {}
       restore: {}
       stanza-create: {}
       stanza-delete: {}
@@ -454,6 +487,7 @@ option:
   target:
     type: string
     command:
+      mount: {}
       restore: {}
     depend:
       option: type
@@ -531,6 +565,19 @@ option:
           - full
           - diff
           - incr
+      mount:
+        sequence: true
+        allow-list:
+          - default
+          - preserve
+          - immediate
+          - standby
+          - none
+          - name
+          - time
+          - lsn
+          - xid
+        default: default
       restore:
         sequence: true
         allow-list:
@@ -1665,6 +1712,7 @@ option:
       repo-get: {}
       repo-ls: {}
       repo-rm: {}
+      mount: {}
       restore: {}
       stanza-create:
         command-role:
@@ -1802,6 +1850,7 @@ option:
       manifest: {}
       repo-get: {}
       repo-ls: {}
+      mount: {}
       restore: {}
       verify: {}
     command-role:

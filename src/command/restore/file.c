@@ -1,39 +1,72 @@
 /***********************************************************************************************************************************
+Restore Individual Files
+***********************************************************************************************************************************/
+#include <build.h>
+
+#include <unistd.h>
+#include <utime.h>
+
+#include "command/backup/blockMap.h"
+#include "command/backup/common.h"
+#include "command/restore/blockChecksum.h"
+#include "command/restore/blockDelta.h"
+#include "command/restore/file.h"
+#include "common/crypto/cipherBlock.h"
+#include "common/crypto/hash.h"
+#include "common/debug.h"
+#include "common/io/filter/size.h"
+#include "common/io/io.h"
+#include "common/io/limitRead.h"
+#include "common/log.h"
+#include "common/memContext.h"
+#include "config/config.h"
+#include "storage/helper.h"
+
+/***********************************************************************************************************************************
+Get the repository path and read range for a manifest file
+***********************************************************************************************************************************/
+FN_EXTERN RestoreFileRepo
+restoreFileRepo(const Manifest *const manifest, const ManifestFile *const file)
+{
+    CHECK(FormatError, file->bundleOffset <= UINT64_MAX - file->sizeRepo, "repository range overflow");
+    // A referenced file is stored under its source backup label
+    RestoreFileRepo result =
+    {
+        .name = backupFileRepoPathP(
+            file->reference != NULL ? file->reference : manifestData(manifest)->backupLabel,
+            .manifestName = file->name, .bundleId = file->bundleId,
+            .compressType = manifestData(manifest)->backupOptionCompressType, .blockIncr = file->blockIncrMapSize != 0),
+    };
+
+    // If block incremental then modify offset and size to where the map is stored since we need to read that first.
+    if (file->blockIncrMapSize != 0)
+    {
+        CHECK(FormatError, file->blockIncrMapSize <= file->sizeRepo, "block map is larger than repository file");
+        result.offset = file->bundleOffset + file->sizeRepo - file->blockIncrMapSize;
+        result.limit = varNewUInt64(file->blockIncrMapSize);
+    }
+    // Else use the file range in the bundle
+    else if (file->bundleId != 0)
+    {
+        result.offset = file->bundleOffset;
+        result.limit = varNewUInt64(file->sizeRepo);
+    }
+
+    return result;
+}
+
+/***********************************************************************************************************************************
 Copy a file from the backup to the specified destination
 ***********************************************************************************************************************************/
-typedef struct RestoreFile
-{
-    const String *name;                                             // File to restore
-    const Buffer *checksum;                                         // Expected checksum
-    uint64_t size;                                                  // Expected size
-    time_t timeModified;                                            // Original modification time
-    mode_t mode;                                                    // Original mode
-    bool zero;                                                      // Should the file be zeroed?
-    const String *user;                                             // Original user
-    const String *group;                                            // Original group
-    uint64_t offset;                                                // Offset into repo file where pg file is located
-    const Variant *limit;                                           // Limit for read in the repo file
-    uint64_t blockIncrMapSize;                                      // Block incremental map size (0 if not incremental)
-    size_t blockIncrSize;                                           // Block incremental size (when map size > 0)
-    size_t blockIncrChecksumSize;                                   // Checksum size (when map size > 0)
-    const String *manifestFile;                                     // Manifest file
-    const Buffer *blockChecksum;                                    // Checksums for block incremental restore, set in restoreFile()
-} RestoreFile;
-
-typedef struct RestoreFileResult
-{
-    const String *manifestFile;                                     // Manifest file
-    RestoreResult result;                                           // Restore result (e.g. preserve, copy)
-    uint64_t blockIncrDeltaSize;                                    // Size restored by block incremental delta
-} RestoreFileResult;
-
-static List *
+FN_EXTERN List *
 restoreFile(
-    const String *const repoFile, const unsigned int repoIdx, const CompressType repoFileCompressType, const time_t copyTimeBegin,
+    const Storage *const storage, const String *const repoFile, const unsigned int repoIdx, const CompressType repoFileCompressType,
+    const time_t copyTimeBegin,
     const bool delta, const bool deltaForce, const bool bundleRaw, const CipherSpec *const cipherSpecBackup,
     const StringList *const referenceList, List *const fileList)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
+        FUNCTION_LOG_PARAM(STORAGE, storage);
         FUNCTION_LOG_PARAM(STRING, repoFile);
         FUNCTION_LOG_PARAM(UINT, repoIdx);
         FUNCTION_LOG_PARAM(ENUM, repoFileCompressType);
@@ -72,7 +105,7 @@ restoreFile(
                 if (delta && !file->zero)
                 {
                     // Perform delta if the file exists
-                    StorageInfo info = storageInfoP(storagePg(), file->name, .ignoreMissing = true, .followLink = true);
+                    StorageInfo info = storageInfoP(storage, file->name, .ignoreMissing = true, .followLink = true);
 
                     if (info.exists)
                     {
@@ -94,7 +127,7 @@ restoreFile(
                             // any portion of an existing file, but of course zero-length files do not have anything to reuse.
                             if (info.size >= file->size || (file->blockIncrMapSize != 0 && info.size != 0))
                             {
-                                const char *const fileName = strZ(storagePathP(storagePg(), file->name));
+                                const char *const fileName = strZ(storagePathP(storage, file->name));
 
                                 // If the file was extended since the backup, then truncate it to the size it was during the backup
                                 // as it might have only been appended to with the earlier portion being unchanged (we will verify
@@ -104,7 +137,7 @@ restoreFile(
                                     // Open file for write
                                     IoWrite *const pgWriteTruncate = storageWriteIo(
                                         storageNewWriteP(
-                                            storagePgWrite(), file->name, .noAtomic = true, .noCreatePath = true,
+                                            storage, file->name, .noAtomic = true, .noCreatePath = true,
                                             .noSyncPath = true, .noTruncate = true));
                                     ioWriteOpen(pgWriteTruncate);
 
@@ -117,7 +150,7 @@ restoreFile(
                                     ioWriteClose(pgWriteTruncate);
 
                                     // Update info
-                                    info = storageInfoP(storagePg(), file->name, .followLink = true);
+                                    info = storageInfoP(storage, file->name, .followLink = true);
 
                                     // For block incremental it is very important that the file be exactly the expected size, so
                                     // make sure the truncate worked as expected
@@ -131,7 +164,7 @@ restoreFile(
 
                                 if (file->size != 0)
                                 {
-                                    read = storageReadIo(storageNewReadP(storagePg(), file->name));
+                                    read = storageReadIo(storageNewReadP(storage, file->name));
 
                                     // Calculate checksum only when size matches
                                     if (info.size == file->size)
@@ -197,7 +230,7 @@ restoreFile(
                 {
                     // Create destination file
                     StorageWrite *const pgFileWrite = storageNewWriteP(
-                        storagePgWrite(), file->name, .modeFile = file->mode, .user = file->user, .group = file->group,
+                        storage, file->name, .modeFile = file->mode, .user = file->user, .group = file->group,
                         .timeModified = file->timeModified, .noAtomic = true, .noCreatePath = true, .noSyncPath = true);
 
                     ioWriteOpen(storageWriteIo(pgFileWrite));
@@ -246,7 +279,7 @@ restoreFile(
 
                     // Create pg file
                     StorageWrite *const pgFileWrite = storageNewWriteP(
-                        storagePgWrite(), file->name, .modeFile = file->mode, .user = file->user, .group = file->group,
+                        storage, file->name, .modeFile = file->mode, .user = file->user, .group = file->group,
                         .timeModified = file->timeModified, .noAtomic = true, .noCreatePath = true, .noSyncPath = true,
                         .noTruncate = file->blockChecksum != NULL);
 
@@ -322,7 +355,7 @@ restoreFile(
                         // Calculate checksum. In theory this is not needed because the file should always be reconstructed
                         // correctly. However, it seems better to check and the pages should still be buffered making the operation
                         // very fast.
-                        IoRead *const read = storageReadIo(storageNewReadP(storagePg(), file->name));
+                        IoRead *const read = storageReadIo(storageNewReadP(storage, file->name));
 
                         ioFilterGroupAdd(ioReadFilterGroup(read), cryptoHashNew(hashTypeSha1));
                         ioReadDrain(read);
@@ -379,4 +412,39 @@ restoreFile(
     MEM_CONTEXT_TEMP_END();
 
     FUNCTION_LOG_RETURN(LIST, result);
+}
+
+/***********************************************************************************************************************************
+Restore one manifest file into local cache storage
+***********************************************************************************************************************************/
+FN_EXTERN void
+restoreFileTo(
+    const unsigned int repoIdx, const Manifest *const manifest, const ManifestFile *const file, const Storage *const storage,
+    const String *const destination)
+{
+    MEM_CONTEXT_TEMP_BEGIN()
+    {
+        const RestoreFileRepo repoFile = restoreFileRepo(manifest, file);
+        // Use the same file parameters as ordinary restore, with a private local destination
+        List *const fileList = lstNewP(sizeof(RestoreFile));
+        lstAdd(
+            fileList,
+            &(RestoreFile)
+        {
+            .name = destination, .manifestFile = file->name, .size = file->size,
+            .checksum = BUF(file->checksumSha1, HASH_TYPE_SHA1_SIZE), .mode = 0600,
+            .offset = repoFile.offset, .limit = repoFile.limit, .blockIncrMapSize = file->blockIncrMapSize,
+            .blockIncrSize = file->blockIncrSize, .blockIncrChecksumSize = file->blockIncrChecksumSize,
+        });
+
+        restoreFile(
+            storage, repoFile.name, repoIdx, manifestData(manifest)->backupOptionCompressType, 0, false, false,
+            file->bundleId != 0 && manifestData(manifest)->bundleRaw, manifestCipherSpec(manifest),
+            manifestReferenceList(manifest), fileList);
+        // Check the restored size before the cache entry becomes available to readers
+        CHECK_FMT(
+            ChecksumError, storageInfoP(storage, destination).size == file->size,
+            "restored file size does not match the manifest for '%s'", strZ(file->name));
+    }
+    MEM_CONTEXT_TEMP_END();
 }
